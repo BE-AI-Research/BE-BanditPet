@@ -137,14 +137,18 @@
     }
     .twinkle-anim { animation: twinkleStar 3s ease-in-out infinite; }
 
-    @keyframes flickerLight {
-      0%, 100% { opacity: 0.1; }
-      5% { opacity: 0.15; }
-      10% { opacity: 0.05; }
-      15% { opacity: 0.1; }
-      50% { opacity: 0.1; }
-      55% { opacity: 0.15; }
+    @keyframes juggle1 { 0% { transform: translate(0,0); } 50% { transform: translate(15px,-20px); } 100% { transform: translate(30px,0); } }
+    @keyframes juggle2 { 0% { transform: translate(0,0); } 50% { transform: translate(15px,15px); } 100% { transform: translate(-15px,15px); } }
+    @keyframes juggle3 { 0% { transform: translate(0,0); } 50% { transform: translate(-30px,-10px); } 100% { transform: translate(-15px,-20px); } }
+    .juggle-anim-1 { animation: juggle1 1s infinite linear alternate; }
+    .juggle-anim-2 { animation: juggle2 1s infinite linear alternate; }
+    .juggle-anim-3 { animation: juggle3 1s infinite linear alternate; }
+
+    @keyframes plateWobble {
+       0%, 100% { transform: rotate(-5deg); }
+       50% { transform: rotate(5deg); }
     }
+
     .flicker-anim { animation: flickerLight 6s infinite; }
 
     .pixelated {
@@ -398,6 +402,19 @@
                 <!-- Crown -->
                 <g id="crownSlot" style="display: none;">
                   <polygon points="42,16 46,21 50,14 54,21 58,16 57,25 43,25" style="fill: var(--lcd-pixel);" />
+                </g>
+                <!-- Juggling Balls (Hidden) -->
+                <g id="juggleProps" style="display: none;">
+                   <circle cx="35" cy="20" r="4" style="fill: var(--lcd-pixel);" class="juggle-anim-1"/>
+                   <circle cx="50" cy="15" r="4" style="fill: var(--lcd-ghost);" class="juggle-anim-2"/>
+                   <circle cx="65" cy="20" r="4" style="fill: var(--lcd-pixel);" class="juggle-anim-3"/>
+                </g>
+                <!-- Spinning Plates (Hidden) -->
+                <g id="plateProps" style="display: none;">
+                   <line x1="38" y1="56" x2="25" y2="25" stroke="var(--lcd-pixel)" stroke-width="1.5"/>
+                   <ellipse cx="25" cy="25" rx="10" ry="2" style="fill: var(--lcd-pixel); animation: plateWobble 0.3s infinite;"/>
+                   <line x1="62" y1="56" x2="75" y2="25" stroke="var(--lcd-pixel)" stroke-width="1.5"/>
+                   <ellipse cx="75" cy="25" rx="10" ry="2" style="fill: var(--lcd-pixel); animation: plateWobble 0.4s infinite;"/>
                 </g>
               </svg>
             </div>
@@ -688,6 +705,149 @@
 
     let isGeneratingAI = false;
     let isAnimatingThrow = false;
+    let battle = { active: false, enemy: null, hp: 100, maxHp: 100, enemyHp: 100, enemyMaxHp: 100, isBlocking: false };
+
+    function clearIdleAnims() {
+       const juggleG = document.getElementById('juggleProps');
+       const plateG = document.getElementById('plateProps');
+       if(juggleG) juggleG.style.display = 'none';
+       if(plateG) plateG.style.display = 'none';
+    }
+
+    function triggerRandomEncounter() {
+       const enemies = [
+         { name: "FERAL CAT", emoji: "🐈", hp: 100, dmg: 15 },
+         { name: "TRASH POSSUM", emoji: "🦡", hp: 150, dmg: 10 },
+         { name: "CITY CROW", emoji: "🐦‍⬛", hp: 80, dmg: 20 }
+       ];
+       battle.enemy = enemies[Math.floor(Math.random() * enemies.length)];
+       battle.enemyHp = battle.enemyMaxHp = battle.enemy.hp;
+       battle.hp = battle.maxHp = 100;
+       battle.isBlocking = false;
+       battle.active = true;
+
+       const miniGameScreen = document.getElementById('miniGameScreen');
+       miniGameScreen.classList.remove('hidden');
+       miniGameScreen.classList.add('flex');
+       document.getElementById('gameTitle').textContent = "BATTLE!";
+       
+       renderBattleScreen();
+       sound.fanfare();
+       setLog(`A wild ${battle.enemy.name} wants your trash!`);
+    }
+
+    function renderBattleScreen() {
+       const arena = document.getElementById('gameArena');
+       document.getElementById('gameTimer').textContent = `HP: ${battle.hp}`;
+       document.getElementById('gameInstructions').textContent = "[A]BITE [B]BLOCK [SEL]THROW [START]FLEE";
+       
+       arena.innerHTML = `
+        <div class="w-full h-full flex flex-col justify-between p-2" style="color: var(--lcd-pixel);">
+          <div class="flex justify-between text-[7px] font-bold">
+            <span>${battle.enemy.name}</span>
+            <span>HP: ${battle.enemyHp}</span>
+          </div>
+          <div class="flex items-center justify-around text-3xl py-1">
+            <span class="text-2xl">🦝</span>
+            <span class="text-[10px] animate-pulse">VS</span>
+            <span class="text-3xl">${battle.enemy.emoji}</span>
+          </div>
+          <div class="w-full h-1.5 rounded overflow-hidden mt-1" style="background-color: var(--lcd-ui);">
+            <div class="h-full transition-all duration-300" style="background-color: var(--lcd-pixel); width: ${(battle.enemyHp / battle.enemyMaxHp) * 100}%;"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function playerBattleAction(btn) {
+       if (btn === 'A') { // BITE
+          sound.munch();
+          battle.enemyHp -= 25;
+          showReaction("BITE!");
+       } else if (btn === 'B') { // BLOCK
+          sound.scuttle();
+          battle.isBlocking = true;
+          showReaction("BLOCK!");
+       } else if (btn === 'SELECT') { // THROW
+          if (pet.hunger >= 5) {
+             pet.hunger -= 5;
+             sound.thud();
+             battle.enemyHp -= 40;
+             showReaction("YEET!");
+             updateHUD();
+          } else {
+             sound.beep();
+             showReaction("Need Trash!");
+             return;
+          }
+       } else if (btn === 'START') { // FLEE
+          if (Math.random() > 0.5) {
+             sound.scuttle();
+             endBattle(false, "Got away safely!");
+             return;
+          } else {
+             sound.beep();
+             showReaction("Failed to flee!");
+          }
+       }
+
+       if (battle.enemyHp <= 0) {
+           endBattle(true, `Defeated the ${battle.enemy.name}!`);
+           return;
+       }
+
+       setTimeout(enemyBattleTurn, 800);
+       renderBattleScreen();
+    }
+
+    function enemyBattleTurn() {
+       if (!battle.active) return;
+       sound.hiss();
+       let dmg = battle.enemy.dmg;
+       if (pet.hunger > 100) dmg = Math.floor(dmg * 1.3); // Fat penalty
+       if (battle.isBlocking) dmg = Math.floor(dmg / 2);
+       battle.isBlocking = false;
+
+       battle.hp -= dmg;
+       showReaction(`${battle.enemy.name} attacked!`);
+       document.getElementById('jimothyGraphic').classList.add('shake-anim');
+       setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 300);
+
+       if (battle.hp <= 0) {
+           endBattle(false, `Lost to the ${battle.enemy.name}...`);
+       } else {
+           renderBattleScreen();
+       }
+    }
+
+    function endBattle(won, msg) {
+       battle.active = false;
+       const miniGameScreen = document.getElementById('miniGameScreen');
+       miniGameScreen.classList.add('hidden');
+       miniGameScreen.classList.remove('flex');
+       
+       if (won) {
+          sound.fanfare();
+          pet.shinyCaps += 2;
+          gainXp(100);
+          pet.chaos += 15;
+          setLog(msg);
+          if (Math.random() > 0.5) {
+             const items = Object.keys(ITEM_DB);
+             const dropped = items[Math.floor(Math.random() * items.length)];
+             pet.inventory = pet.inventory || {};
+             pet.inventory[dropped] = (pet.inventory[dropped] || 0) + 1;
+             showReaction(`Found ${ITEM_DB[dropped].icon}!`);
+          }
+       } else {
+          sound.thud();
+          pet.hunger = Math.max(0, pet.hunger - 20);
+          pet.energy = Math.max(0, pet.energy - 30);
+          setLog(msg);
+       }
+       updateHUD();
+    }
+
     let currentFoodIdx = 0;
     const TRASH_MENU = [
       { name: "Soggy Fries", hunger: +18, chaos: +5, grease: +10, desc: "Slurped down 4 limp fries!" },
@@ -1013,14 +1173,22 @@
     }
 
     function updateHUD() {
-      // Clamping values 0 to 100
-      pet.hunger = Math.min(100, Math.max(0, pet.hunger));
+      // Clamping values 0 to 150 for fatness
+      pet.hunger = Math.min(150, Math.max(0, pet.hunger));
       pet.chaos = Math.min(100, Math.max(0, pet.chaos));
       pet.grease = Math.min(100, Math.max(0, pet.grease));
       pet.energy = Math.min(100, Math.max(0, pet.energy));
 
-      elements.hungerBar.style.width = `${pet.hunger}%`;
+      elements.hungerBar.style.width = `${Math.min(100, pet.hunger)}%`;
       elements.hunger.textContent = `${Math.round(pet.hunger)}%`;
+      
+      if (pet.hunger > 100) {
+         elements.hungerBar.style.backgroundColor = '#fbbf24'; // Warning color
+         document.getElementById('jimothyGraphic').style.transform = `scaleX(${1 + (pet.hunger - 100) / 100})`;
+      } else {
+         elements.hungerBar.style.backgroundColor = 'var(--lcd-pixel)';
+         document.getElementById('jimothyGraphic').style.transform = `scaleX(1)`;
+      }
 
       elements.chaosBar.style.width = `${pet.chaos}%`;
       elements.chaos.textContent = `${Math.round(pet.chaos)}%`;
@@ -1210,8 +1378,28 @@
         // Throw condition logic!
         if (pet.chaos >= 60 && pet.hunger < 50 && Math.random() < 0.4) {
             if (!isAnimatingThrow) throwTrashAtScreen();
-        } else if (Math.random() < 0.25) {
+        } else if (Math.random() < 0.20) {
           triggerRandomAntics();
+        } else if (Math.random() < 0.15 && !pet.inMiniGame && !battle.active) {
+          triggerRandomEncounter();
+        } else if (Math.random() < 0.20 && !pet.inMiniGame && !battle.active) {
+          // Play idle animations
+          const anims = ['juggle', 'plates'];
+          const picked = anims[Math.floor(Math.random() * anims.length)];
+          const juggleG = document.getElementById('juggleProps');
+          const plateG = document.getElementById('plateProps');
+          if (picked === 'juggle') {
+             juggleG.style.display = 'block';
+             plateG.style.display = 'none';
+             setLog("Jimothy is juggling garbage!");
+          } else {
+             plateG.style.display = 'block';
+             juggleG.style.display = 'none';
+             setLog("Jimothy is spinning plates!");
+          }
+          setTimeout(() => {
+             clearIdleAnims();
+          }, 6000);
         } else {
           gainXp(3); // Passive survival XP
           // Palace Building Mechanics
@@ -1361,6 +1549,8 @@
           cansTipped++;
           dogWaking = Math.min(3, dogWaking + 1);
           
+          if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++; // Fat penalty clumsy
+          
           // Random item drop chance during raids
           if (Math.random() > 0.8) {
              const itemKeys = Object.keys(ITEM_DB);
@@ -1376,8 +1566,13 @@
           renderGameScreen();
         }
       } else if (btn === 'B') {
-        sound.scuttle();
-        dogWaking = Math.max(0, dogWaking - 1); // Hide and calm down
+        if (pet.hunger > 100 && Math.random() < 0.3) {
+           sound.thud();
+           showReaction("Too fat to hide!"); // Fat penalty failure
+        } else {
+           sound.scuttle();
+           dogWaking = Math.max(0, dogWaking - 1); // Hide and calm down
+        }
         renderGameScreen();
       }
     }
@@ -1487,12 +1682,15 @@
     }
 
     btnMenu.addEventListener('click', () => {
+      clearIdleAnims();
       if (isInventoryOpen) toggleInventory();
       else toggleMenu();
     });
 
     btnA.addEventListener('click', () => {
+      clearIdleAnims();
       sound.beep();
+      if (battle.active) { playerBattleAction('A'); return; }
       if (isInventoryOpen) {
         if (invItems.length > 0) {
           const itemId = invItems[invIndex];
@@ -1538,10 +1736,12 @@
     });
 
     btnB.addEventListener('click', () => {
+      clearIdleAnims();
       sound.beep();
+      if (battle.active) { playerBattleAction('B'); return; }
       if (isInventoryOpen) {
-        toggleInventory();
-        return;
+         toggleInventory();
+         return;
       }
       if (isMenuOpen) {
         toggleMenu(); // B cancels/exits the menu
@@ -1549,15 +1749,22 @@
       }
       if (pet.inMiniGame) {
         miniGameHandleButton('B');
-        return;
+      } else {
+        initMiniGame();
       }
-      if (pet.isSleeping) return;
-      initMiniGame();
     });
 
-    btnSelect.addEventListener('click', () => { sound.beep(); toggleNap(); });
+    btnSelect.addEventListener('click', () => { 
+      clearIdleAnims();
+      sound.beep(); 
+      if (battle.active) { playerBattleAction('SELECT'); return; }
+      toggleNap(); 
+    });
     
     btnStart.addEventListener('click', () => {
+      clearIdleAnims();
+      sound.beep();
+      if (battle.active) { playerBattleAction('START'); return; }
       sound.scuttle();
       if (pet.isSleeping) return;
       pet.grease = Math.min(100, pet.grease + 25);
@@ -1569,6 +1776,7 @@
 
     // D-Pad Mapping (Poke mechanic or Menu Navigation)
     const pokeAction = () => {
+       clearIdleAnims();
        if (pet.isSleeping || isMenuOpen || isInventoryOpen) return;
        
        const pokeEvents = [
