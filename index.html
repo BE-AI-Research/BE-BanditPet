@@ -525,6 +525,29 @@
         [440, 554, 659, 880].forEach((n, idx) => setTimeout(() => this.playTone(n, 'square', 0.12, 0.1), idx * 90));
       }
       thud() { this.playTone(90, 'triangle', 0.15, 0.15); }
+      trill() {
+        if (this.muted) return;
+        this.init();
+        [600, 750, 650, 800, 700, 850].forEach((f, i) => setTimeout(() => this.playTone(f, 'sine', 0.04, 0.06), i * 35));
+      }
+      grumble() {
+        if (this.muted) return;
+        this.init();
+        [120, 105, 115, 100].forEach((f, i) => setTimeout(() => this.playTone(f, 'sawtooth', 0.1, 0.08), i * 90));
+      }
+      yip() {
+        if (this.muted) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(900, this.ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+        osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.start(); osc.stop(this.ctx.currentTime + 0.12);
+      }
     }
     const sound = new RetroSound();
 
@@ -1076,6 +1099,7 @@
         // Notifications for critical states (cooldown prevents spamming)
         if (pet.hunger < 20) {
           notifier.send('hunger', 'Starvation Imminent! 🥫', 'Jimothy is chewing the drywall. Feed him some trash before he eats your router!', 120000);
+          if (!pet.inMiniGame && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
         } else if (pet.chaos > 85) {
           notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. You might want to check on him before he devours your fridge...', 120000);
         }
@@ -1396,7 +1420,8 @@
         showReaction("🤮 GROSS!");
         sound.hiss();
       } else {
-        sound.munch();
+        if (food.hunger > 30) sound.trill(); // Very good food triggers a happy trill
+        else sound.munch();
         showReaction(`*NOM* ${food.name}!`);
       }
       pet.hunger += food.hunger; pet.chaos += food.chaos; pet.grease += food.grease;
@@ -1436,8 +1461,25 @@
     // D-Pad Mapping (Poke mechanic or Menu Navigation)
     const pokeAction = () => {
        if (pet.isSleeping || isMenuOpen || isInventoryOpen) return;
-       sound.scuttle(); pet.chaos += 2;
-       showReaction("🐾 *GNAW!*"); setLog("Jimothy bit your finger.");
+       
+       const pokeEvents = [
+         { sfx: 'yip', msg: "🐾 *YIP!*", log: "You poked Jimothy.", chaos: 2 },
+         { sfx: 'grumble', msg: "💢 *GRUMBLE*", log: "Jimothy growled at your finger.", chaos: 5 },
+         { sfx: 'trill', msg: "✨ *TRILL*", log: "Jimothy purred happily.", chaos: -2 },
+         { sfx: 'hiss', msg: "🤬 *HISS*", log: "Jimothy hated that.", chaos: 8 },
+         { sfx: 'scuttle', msg: "🏃 *SCUTTLE*", log: "Jimothy dodged your finger.", chaos: 0 }
+       ];
+       const ev = pokeEvents[Math.floor(Math.random() * pokeEvents.length)];
+       
+       if (ev.sfx === 'hiss') {
+           elements.graphic.classList.remove('idle-anim');
+           elements.graphic.classList.add('shake-anim');
+           setTimeout(() => { elements.graphic.classList.remove('shake-anim'); if(!pet.isSleeping) elements.graphic.classList.add('idle-anim'); }, 700);
+       }
+       
+       sound[ev.sfx]();
+       pet.chaos += ev.chaos;
+       showReaction(ev.msg); setLog(ev.log);
        updateHUD();
     };
     
