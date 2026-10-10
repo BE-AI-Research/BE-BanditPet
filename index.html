@@ -116,6 +116,13 @@
     }
     .splat-drip { animation: splatDrip 3.5s forwards; }
 
+    @keyframes awardPop {
+      0% { transform: scale(0.5); opacity: 0; }
+      60% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .award-pop { animation: awardPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
     /* Environment Animations */
     @keyframes cloudPan {
       from { transform: translateX(-40px); }
@@ -193,6 +200,16 @@
                  <path d="M50 50 L20 10 M50 50 L80 15 M50 50 L10 60 M50 50 L90 70 M50 50 L40 90 M50 50 L70 95 M40 40 L60 60 M30 50 L70 40 M45 60 L60 35" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" fill="none" />
                  <path d="M50 50 L25 15 M50 50 L85 20 M50 50 L15 65 M50 50 L85 65 M50 50 L35 85" stroke="rgba(0,0,0,0.3)" stroke-width="0.5" fill="none" />
              </svg>
+          </div>
+
+          <!-- Level Up Award Overlay -->
+          <div id="awardScreen" class="absolute inset-0 z-50 hidden flex-col items-center justify-center p-2">
+            <div class="absolute inset-0 opacity-90" style="background-color: var(--lcd-bg);"></div>
+            <div class="award-pop relative z-10 flex flex-col items-center justify-center border-[3px] p-4 shadow-xl w-[90%] text-center" style="background-color: var(--lcd-bg); border-color: var(--lcd-pixel);">
+              <span class="text-[9px] font-bold mb-1 animate-pulse" style="color: var(--lcd-pixel);">🏆 MILESTONE! 🏆</span>
+              <span id="awardIcon" class="text-5xl drop-shadow-lg my-2">🥇</span>
+              <span id="awardText" class="text-[10px] font-bold" style="color: var(--lcd-pixel);">GOLDEN GARBAGE</span>
+            </div>
           </div>
 
           <!-- On-Screen Interactive Menu -->
@@ -665,7 +682,8 @@
     let pet = {
       name: "Jimothy", ageMinutes: 1, hunger: 75, chaos: 50, grease: 65, energy: 70,
       shinyCaps: 3, stage: 'kit', isSleeping: false, lastSaved: Date.now(), inMiniGame: false,
-      trashCollected: 0, raidFrenzy: 0, palaceSeed: 0.5, inventory: {}
+      trashCollected: 0, raidFrenzy: 0, palaceSeed: 0.5, inventory: {},
+      level: 1, xp: 0, awardsUnlocked: []
     };
 
     let isGeneratingAI = false;
@@ -718,6 +736,9 @@
           pet = { ...pet, ...parsed };
           pet.inMiniGame = false; // Never resume directly into a minigame
           pet.inventory = pet.inventory || {}; // Ensure inventory object exists
+          pet.level = pet.level || 1; // Backwards compatibility for old saves
+          pet.xp = pet.xp || 0;
+          pet.awardsUnlocked = pet.awardsUnlocked || [];
           
           if (pet.lastSaved) {
             const now = Date.now();
@@ -744,10 +765,86 @@
       } catch(e) { console.warn("Save load error, starting fresh", e); }
     }
 
+    function gainXp(amount) {
+      pet.xp += amount;
+      let leveledUp = false;
+      // Exponential XP scaling curve for higher ranks
+      let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
+      
+      while (pet.xp >= xpReq) {
+        pet.xp -= xpReq;
+        pet.level++;
+        leveledUp = true;
+        pet.energy = 100; // Fully restore energy on level up
+        xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
+      }
+      
+      if (leveledUp) {
+        pet.awardsUnlocked = pet.awardsUnlocked || [];
+        const MILESTONES = [
+          { level: 5, emoji: "🥉", name: "BRONZE BIN" },
+          { level: 10, emoji: "🥈", name: "SILVER SCRAPS" },
+          { level: 25, emoji: "🥇", name: "GOLD GARBAGE" },
+          { level: 50, emoji: "💎", name: "DIAMOND DUMPSTER" },
+          { level: 100, emoji: "🌌", name: "COSMIC COMPOST" },
+          { level: 200, emoji: "☣️", name: "TOXIC TREASURE" },
+          { level: 300, emoji: "🛸", name: "ALIEN ARTIFACT" },
+          { level: 400, emoji: "🏰", name: "TRASH CASTLE" },
+          { level: 500, emoji: "🪐", name: "PLANET PLUNDER" },
+          { level: 600, emoji: "☄️", name: "METEORIC MUCK" },
+          { level: 700, emoji: "🔮", name: "MYSTIC MUD" },
+          { level: 800, emoji: "⚡", name: "OMNI-OOZE" },
+          { level: 900, emoji: "🌠", name: "STELLAR SCRAPS" },
+          { level: 1000, emoji: "♾️", name: "INFINITE TRASH" }
+        ];
+        
+        let newAward = null;
+        MILESTONES.forEach(m => {
+            if (pet.level >= m.level && !pet.awardsUnlocked.includes(m.level)) {
+                newAward = m;
+                pet.awardsUnlocked.push(m.level);
+            }
+        });
+
+        if (newAward) {
+            showAward(newAward.emoji, newAward.name);
+        } else {
+            sound.fanfare();
+            showReaction(`⭐ LEVEL ${pet.level}!`, 2500);
+        }
+        
+        setLog(`Jimothy leveled up to LVL ${pet.level}! Energy restored.`);
+        checkEvolution();
+      }
+    }
+
+    function showAward(emoji, title) {
+      const awardScreen = document.getElementById('awardScreen');
+      const awardIcon = document.getElementById('awardIcon');
+      const awardText = document.getElementById('awardText');
+      
+      awardIcon.textContent = emoji;
+      awardText.textContent = title;
+      
+      awardScreen.classList.remove('hidden');
+      awardScreen.classList.add('flex');
+      
+      sound.fanfare();
+      setTimeout(() => sound.trill(), 600);
+      
+      setTimeout(() => {
+        awardScreen.classList.add('hidden');
+        awardScreen.classList.remove('flex');
+      }, 4000);
+    }
+
     function checkEvolution() {
       const oldStage = pet.stage;
-      if (pet.shinyCaps >= 10 && pet.chaos >= 70) pet.stage = 'emperor';
-      else if (pet.grease >= 75) pet.stage = 'goblin';
+      
+      // Evolutions are now gated by both Level AND stats!
+      if (pet.level >= 20 && pet.shinyCaps >= 25 && pet.chaos >= 90) pet.stage = 'deity';
+      else if (pet.level >= 10 && pet.shinyCaps >= 10 && pet.chaos >= 70) pet.stage = 'emperor';
+      else if (pet.level >= 5 && pet.grease >= 75) pet.stage = 'goblin';
       else if (pet.chaos >= 60) pet.stage = 'burglar';
       else pet.stage = 'kit';
 
@@ -755,6 +852,7 @@
       if (pet.stage === 'burglar') title = "MIDNIGHT BURGLAR";
       if (pet.stage === 'goblin') title = "FERAL SEWER GOBLIN";
       if (pet.stage === 'emperor') { title = "👑 DUMPSTER EMPEROR"; elements.crown.style.display = 'block'; } 
+      else if (pet.stage === 'deity') { title = "🌌 TRASH DEITY"; elements.crown.style.display = 'block'; }
       else elements.crown.style.display = 'none';
 
       if (oldStage !== pet.stage) {
@@ -762,7 +860,10 @@
         showReaction("⚡ EVOLVED! ⚡", 2500);
         notifier.send('evolve', 'Jimothy Mutated! ⚡', `God help us all, he's now a ${title}...`, 0);
       }
-      elements.rankBadge.textContent = `${title} (M:${pet.ageMinutes})`;
+      
+      let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
+      elements.rankBadge.textContent = `LVL ${pet.level} ${title}`;
+      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`; // Hover for XP progress
     }
 
     // Menu System Variables & Logic
@@ -883,7 +984,7 @@
         // Explicitly wipe the local storage save data
         localStorage.removeItem(STATE_KEY); 
         
-        pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {} };
+        pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [] };
         
         if (pet.inMiniGame) {
           clearInterval(miniGameInterval);
@@ -1062,6 +1163,7 @@
         showReaction("👀 *CRASH!*");
       }
       
+      gainXp(15);
       setLog(ev.text);
       sound.beep();
     }
@@ -1089,6 +1191,7 @@
       pet.ageMinutes += 1;
       if (pet.isSleeping) {
         pet.energy = Math.min(100, pet.energy + 8);
+        gainXp(1); // Passive rest XP
         // Hunger, chaos, and grease are COMPLETELY PAUSED while sleeping!
       } else {
         pet.hunger = Math.max(0, pet.hunger - 2.5);
@@ -1110,6 +1213,7 @@
         } else if (Math.random() < 0.25) {
           triggerRandomAntics();
         } else {
+          gainXp(3); // Passive survival XP
           // Palace Building Mechanics
           let didBuild = false;
           let didRearrange = false;
@@ -1293,6 +1397,7 @@
         pet.raidFrenzy = 6; // 60 seconds of free accelerated building
         pet.chaos += 10;
         pet.grease += 5;
+        gainXp(50 + (cansTipped * 10)); // Massive XP reward for raiding
         showReaction(`👑 +${loot} TRASH!`);
         message = `Looted ${cansTipped} bins & triggered a BUILD FRENZY!`;
       } else {
@@ -1393,6 +1498,7 @@
           const itemId = invItems[invIndex];
           ITEM_DB[itemId].use();
           pet.inventory[itemId]--;
+          gainXp(25);
           showReaction(`Used ${ITEM_DB[itemId].name}!`);
           setLog(`Jimothy consumed ${ITEM_DB[itemId].name}.`);
           renderInventory();
@@ -1419,10 +1525,12 @@
         setTimeout(() => { elements.graphic.classList.remove('shake-anim'); elements.graphic.classList.add('idle-anim'); }, 700);
         showReaction("🤮 GROSS!");
         sound.hiss();
+        gainXp(5);
       } else {
         if (food.hunger > 30) sound.trill(); // Very good food triggers a happy trill
         else sound.munch();
         showReaction(`*NOM* ${food.name}!`);
+        gainXp(15 + food.hunger);
       }
       pet.hunger += food.hunger; pet.chaos += food.chaos; pet.grease += food.grease;
       setLog(food.desc);
@@ -1453,6 +1561,7 @@
       sound.scuttle();
       if (pet.isSleeping) return;
       pet.grease = Math.min(100, pet.grease + 25);
+      gainXp(15);
       showReaction("✨ Fresh Grime!");
       setLog("Coated Jimothy in warm, linty goodness.");
       updateHUD();
