@@ -711,7 +711,7 @@
     const STATE_KEY = 'jimothy_tamagotchi_save';
     let pet = {
       name: "Jimothy", ageMinutes: 1, hunger: 75, chaos: 50, grease: 65, energy: 70,
-      shinyCaps: 3, stage: 'kit', isSleeping: false, lastSaved: Date.now(), inMiniGame: false,
+      shinyCaps: 3, stage: 'kit', isSleeping: false, lastSaved: Date.now(), inMiniGame: false, inHeistGame: false,
       trashCollected: 0, raidFrenzy: 0, palaceSeed: 0.5, inventory: {},
       level: 1, xp: 0, awardsUnlocked: []
     };
@@ -840,6 +840,7 @@
        miniGameScreen.classList.remove('flex');
        
        if (won) {
+          haptic([100, 50, 100, 50, 200]);
           sound.fanfare();
           pet.shinyCaps += 2;
           gainXp(100);
@@ -853,9 +854,27 @@
              showReaction(`Found ${ITEM_DB[dropped].icon}!`);
           }
        } else {
+          haptic([40, 50, 40]);
           sound.thud();
           pet.hunger = Math.max(0, pet.hunger - 20);
           pet.energy = Math.max(0, pet.energy - 30);
+          
+          // Steal item logic
+          let availableItems = [];
+          if (pet.inventory) {
+              availableItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0);
+          }
+          
+          if (availableItems.length > 0) {
+              const stolenItemKey = availableItems[Math.floor(Math.random() * availableItems.length)];
+              pet.inventory[stolenItemKey]--;
+              const item = ITEM_DB[stolenItemKey];
+              msg += ` They stole your ${item.icon} ${item.name}!`;
+              showReaction(`Lost ${item.icon}!`);
+          } else {
+              msg += ` You were too broke to rob!`;
+          }
+          
           setLog(msg);
        }
        updateHUD();
@@ -908,6 +927,7 @@
           const parsed = JSON.parse(saved);
           pet = { ...pet, ...parsed };
           pet.inMiniGame = false; // Never resume directly into a minigame
+          pet.inHeistGame = false; // Never resume into a heist
           pet.inventory = pet.inventory || {}; // Ensure inventory object exists
           pet.level = pet.level || 1; // Backwards compatibility for old saves
           pet.xp = pet.xp || 0;
@@ -1042,7 +1062,7 @@
     // Menu System Variables & Logic
     let isMenuOpen = false;
     let menuIndex = 0;
-    const MENU_OPTIONS = ["✨ AI FORAGE", "🎒 INVENTORY", "💤 NAP TIME", "🧹 LINT ROLL", "🔄 RESET JIMOTHY", "❌ CANCEL"];
+    const MENU_OPTIONS = ["✨ AI FORAGE", "🎒 INVENTORY", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
 
     // Inventory System Variables & Logic
     let isInventoryOpen = false;
@@ -1073,7 +1093,7 @@
     }
 
     function toggleMenu() {
-      if (pet.inMiniGame) return;
+      if (pet.inMiniGame || pet.inHeistGame) return;
       isMenuOpen = !isMenuOpen;
       const menuDiv = document.getElementById('menuScreen');
       if (isMenuOpen) {
@@ -1090,7 +1110,7 @@
     }
 
     function toggleInventory() {
-      if (pet.inMiniGame) return;
+      if (pet.inMiniGame || pet.inHeistGame) return;
       isInventoryOpen = !isInventoryOpen;
       const invDiv = document.getElementById('inventoryScreen');
       if (isInventoryOpen) {
@@ -1153,17 +1173,21 @@
         btnStart.click(); // Reuse lint logic
       } else if (opt.includes("INVENTORY")) {
         toggleInventory();
+      } else if (opt.includes("HEIST")) {
+        initHeistGame();
       } else if (opt.includes("RESET")) {
         // Explicitly wipe the local storage save data
         localStorage.removeItem(STATE_KEY); 
         
-        pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [] };
+        pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [], inMiniGame: false, inHeistGame: false };
         
-        if (pet.inMiniGame) {
+        if (pet.inMiniGame || pet.inHeistGame) {
           clearInterval(miniGameInterval);
+          if (typeof heistInterval !== 'undefined') clearInterval(heistInterval);
           document.getElementById('miniGameScreen').classList.add('hidden');
           document.getElementById('miniGameScreen').classList.remove('flex');
           pet.inMiniGame = false;
+          pet.inHeistGame = false;
         }
         
         // Wake him up visually if he was napping
@@ -1277,7 +1301,7 @@
     }
 
     function throwTrashAtScreen() {
-      if (pet.inMiniGame || pet.isSleeping || isAnimatingThrow) return;
+      if (pet.inMiniGame || pet.inHeistGame || pet.isSleeping || isAnimatingThrow) return;
       isAnimatingThrow = true;
       
       const projectiles = [
@@ -1383,7 +1407,7 @@
         // Notifications for critical states (cooldown prevents spamming)
         if (pet.hunger < 20) {
           notifier.send('hunger', 'Starvation Imminent! 🥫', 'Jimothy is chewing the drywall. Feed him some trash before he eats your router!', 120000);
-          if (!pet.inMiniGame && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
+          if (!pet.inMiniGame && !pet.inHeistGame && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
         } else if (pet.chaos > 85) {
           notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. You might want to check on him before he devours your fridge...', 120000);
         }
@@ -1393,9 +1417,9 @@
             if (!isAnimatingThrow) throwTrashAtScreen();
         } else if (Math.random() < 0.20) {
           triggerRandomAntics();
-        } else if (Math.random() < 0.15 && !pet.inMiniGame && !battle.active) {
+        } else if (Math.random() < 0.15 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
           triggerRandomEncounter();
-        } else if (Math.random() < 0.20 && !pet.inMiniGame && !battle.active) {
+        } else if (Math.random() < 0.20 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
           // Play idle animations
           const anims = ['juggle', 'plates'];
           const picked = anims[Math.floor(Math.random() * anims.length)];
@@ -1443,7 +1467,7 @@
               setLog("Jimothy is frantically rearranging his trash!");
           }
 
-          if (didBuild && !isAnimatingThrow && !pet.isSleeping && !pet.inMiniGame) {
+          if (didBuild && !isAnimatingThrow && !pet.isSleeping && !pet.inMiniGame && !pet.inHeistGame) {
               if (Math.random() < 0.4 || didRearrange) {
                   // Play scurry animation
                   elements.graphic.classList.remove('idle-anim');
@@ -1621,6 +1645,147 @@
       updateHUD();
     }
 
+    let heistInterval = null;
+    let heistTimerVal = 20;
+    let suspicion = 0;
+    let heistLoot = 0;
+
+    function initHeistGame() {
+      const hrs = new Date().getHours();
+      if (hrs >= 6 && hrs < 18) {
+        showReaction("☀️ Too bright!");
+        setLog("Jimothy refuses to burgle in broad daylight. Wait until night!");
+        sound.hiss();
+        return;
+      }
+      if (pet.energy < 20) { showReaction("Too tired!"); sound.thud(); return; }
+      
+      pet.inHeistGame = true;
+      heistTimerVal = 20;
+      heistLoot = 0;
+      suspicion = 0;
+      
+      document.getElementById('miniGameScreen').classList.remove('hidden');
+      document.getElementById('miniGameScreen').classList.add('flex');
+      document.getElementById('gameTitle').textContent = "NIGHT HEIST";
+      renderHeistScreen();
+
+      heistInterval = setInterval(() => {
+        heistTimerVal--;
+        document.getElementById('gameTimer').textContent = `TIME: ${heistTimerVal}s`;
+        
+        // Suspicion slowly ticks up naturally
+        if (Math.random() > 0.3) suspicion += 10;
+        
+        renderHeistScreen();
+
+        if (suspicion >= 100) {
+          endHeistGame(false, "🔦 BUSTED! The homeowner caught you!");
+        } else if (heistTimerVal <= 0) {
+          endHeistGame(true, `Escaped with ${heistLoot} stolen goods!`);
+        }
+      }, 1000);
+    }
+
+    function renderHeistScreen() {
+      const arena = document.getElementById('gameArena');
+      let statusText = "👻 SNEAKING";
+      if (suspicion > 50) statusText = "👀 SUSPICIOUS";
+      if (suspicion > 80) statusText = "🔦 SEARCHING!";
+      
+      arena.innerHTML = `
+        <div class="w-full h-full flex flex-col justify-between p-2" style="color: var(--lcd-pixel);">
+          <div class="flex justify-between text-[7px] font-bold">
+            <span>LOOT: ${heistLoot}</span>
+            <span class="${suspicion > 80 ? 'animate-pulse' : ''}">${statusText}</span>
+          </div>
+          <div class="flex items-center justify-around text-2xl py-1">
+            <span class="text-xl">🦝</span>
+            <span class="text-3xl">🏠</span>
+            <span class="text-[7px] font-bold px-1 py-0.5 rounded border" style="border-color: var(--lcd-pixel);">
+              ${suspicion > 60 ? "⚠️ FREEZE(B)" : "SNATCH(A)"}
+            </span>
+          </div>
+          <div class="w-full h-1.5 rounded overflow-hidden" style="background-color: var(--lcd-ui);">
+            <div class="h-full transition-all duration-300 ${suspicion > 80 ? 'bg-red-500' : ''}" style="background-color: var(--lcd-pixel); width: ${Math.min(100, suspicion)}%;"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function heistHandleButton(btn) {
+      if (btn === 'A') {
+        if (suspicion >= 85) {
+          sound.hiss();
+          suspicion += 20; // Instant bust
+          renderHeistScreen();
+        } else {
+          sound.munch();
+          heistLoot++;
+          suspicion += 15 + Math.floor(Math.random() * 10);
+          
+          // High random item drop chance during heist
+          if (Math.random() > 0.5) {
+             const itemKeys = Object.keys(ITEM_DB);
+             const randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+             pet.inventory = pet.inventory || {};
+             pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
+             showReaction(`Stole ${ITEM_DB[randomItem].icon}!`);
+             sound.fanfare();
+          } else {
+             showReaction("Snatch!");
+          }
+          renderHeistScreen();
+        }
+      } else if (btn === 'B') {
+        sound.scuttle();
+        suspicion = Math.max(0, suspicion - 30); // Freeze and drop suspicion
+        showReaction("Frozen...");
+        renderHeistScreen();
+      }
+    }
+
+    function endHeistGame(won, message) {
+      clearInterval(heistInterval);
+      pet.inHeistGame = false;
+      document.getElementById('miniGameScreen').classList.add('hidden');
+      document.getElementById('miniGameScreen').classList.remove('flex');
+      pet.energy -= 25;
+
+      if (won) {
+        sound.fanfare();
+        let lootTrash = heistLoot * 10;
+        pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
+        pet.hunger = Math.min(150, pet.hunger + (heistLoot * 5)); 
+        pet.chaos += 20;
+        pet.shinyCaps += Math.floor(heistLoot / 2); // Good caps reward
+        gainXp(100 + (heistLoot * 15)); 
+        showReaction(`👑 HEIST SUCCESS!`);
+      } else {
+        document.getElementById('jimothyGraphic').classList.remove('idle-anim');
+        document.getElementById('jimothyGraphic').classList.add('shake-anim');
+        setTimeout(() => { 
+            document.getElementById('jimothyGraphic').classList.remove('shake-anim'); 
+            if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim');
+        }, 700);
+        showReaction("🚨 BUSTED!");
+        
+        // Penalty
+        pet.hunger = Math.max(0, pet.hunger - 20);
+        
+        // Lose a random item
+        let availableItems = Object.keys(pet.inventory || {}).filter(k => pet.inventory[k] > 0);
+        if (availableItems.length > 0) {
+            const stolenItemKey = availableItems[Math.floor(Math.random() * availableItems.length)];
+            pet.inventory[stolenItemKey]--;
+            const item = ITEM_DB[stolenItemKey];
+            message += ` Dropped your ${item.icon} while running!`;
+        }
+      }
+      setLog(message);
+      updateHUD();
+    }
+
     function drawTrashPalace() {
       const tc = pet.trashCollected || 0;
       const g = document.getElementById('trashPalaceGroup');
@@ -1727,6 +1892,10 @@
         miniGameHandleButton('A');
         return;
       }
+      if (pet.inHeistGame) {
+        heistHandleButton('A');
+        return;
+      }
       if (pet.isSleeping) return;
       const food = TRASH_MENU[currentFoodIdx];
       currentFoodIdx = (currentFoodIdx + 1) % TRASH_MENU.length;
@@ -1762,15 +1931,20 @@
       }
       if (pet.inMiniGame) {
         miniGameHandleButton('B');
-      } else {
-        initMiniGame();
+        return;
       }
+      if (pet.inHeistGame) {
+        heistHandleButton('B');
+        return;
+      }
+      initMiniGame();
     });
 
     btnSelect.addEventListener('click', () => { 
       clearIdleAnims();
       sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
+      if (pet.inMiniGame || pet.inHeistGame) return;
       toggleNap(); 
     });
     
@@ -1778,6 +1952,7 @@
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
+      if (pet.inMiniGame || pet.inHeistGame) return;
       sound.scuttle();
       if (pet.isSleeping) return;
       pet.grease = Math.min(100, pet.grease + 25);
