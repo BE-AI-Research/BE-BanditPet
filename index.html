@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Jimothy-Gotchi: Raccoon Virtual Pet</title>
+  <title>BE-BandiPet Jima-Gotchi: Pocket-sized Raccoon Virtual "Pet Terrorist"</title>
+  
   <!-- Raccoon Favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦝</text></svg>">
   <!-- Tailwind CSS CDN -->
@@ -12,6 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  
   <style>
     :root {
       /* Theme Defaults */
@@ -448,7 +450,7 @@
         </div>
       </div>
 
-      <!-- Utilities Row (Now just a Menu Button) -->
+      <!-- Utilities Row (Menu Button) -->
       <div class="w-full mt-3 flex justify-center px-4 text-[8px] sm:text-[10px] font-bold shrink-0">
         <button id="btnMenu" class="text-slate-200 bg-slate-800 px-6 py-1.5 rounded-full border border-slate-600 active:bg-slate-700 active:scale-95 transition-all shadow-[inset_0_-2px_4px_rgba(0,0,0,0.5)] tracking-widest">≡ MENU</button>
       </div>
@@ -720,6 +722,80 @@
     let isAnimatingThrow = false;
     let battle = { active: false, enemy: null, hp: 100, maxHp: 100, enemyHp: 100, enemyMaxHp: 100, isBlocking: false };
 
+    // Google Chat Webhook Integration
+    let chatWebhookUrl = localStorage.getItem('jimothy_chat_webhook') || "";
+    document.getElementById('webhookToggleBtn').addEventListener('click', () => {
+      haptic(15);
+      const url = prompt("Enter a Google Chat Webhook URL to let Jimothy spam your team (Leave blank to disable):", chatWebhookUrl);
+      if (url !== null) {
+        chatWebhookUrl = url.trim();
+        localStorage.setItem('jimothy_chat_webhook', chatWebhookUrl);
+        if (chatWebhookUrl) {
+           setLog("Chat Webhook linked! He's online...");
+           notifyChat("🦝 *Jimothy has entered the chat.* Hide your trash.");
+        } else {
+           setLog("Chat Webhook disconnected.");
+        }
+      }
+    });
+
+    function notifyChat(message) {
+      if (!chatWebhookUrl) return;
+      fetch(chatWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: message })
+      }).catch(e => console.error("Chat Webhook Error:", e));
+    }
+
+    // Gemini API AI Forage
+    async function generateAIFood() {
+      if (isGeneratingAI || pet.inMiniGame || pet.inHeistGame || pet.isSleeping || battle.active) return;
+      isGeneratingAI = true;
+      setLog("Consulting the AI Dumpster...");
+      sound.scuttle();
+      document.getElementById('jimothyGraphic').classList.add('shake-anim');
+      
+      try {
+        const apiKey = ""; // Leave blank or fill if testing outside
+        const payload = {
+            contents: [{ parts: [{ text: "Generate a new trash item for Jimothy the raccoon." }] }],
+            systemInstruction: { parts: [{ text: "Return valid JSON object: {name(string), hunger(-10 to 40), chaos(0 to 30), grease(-10 to 30), desc(string under 40 chars), isGross(boolean)}" }] },
+            generationConfig: { responseMimeType: "application/json" }
+        };
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const result = await response.json();
+        document.getElementById('jimothyGraphic').classList.remove('shake-anim');
+        
+        if (result.candidates) {
+            const aiFood = JSON.parse(result.candidates[0].content.parts[0].text);
+            if (aiFood.isGross) {
+                document.getElementById('jimothyGraphic').classList.add('shake-anim');
+                setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 700);
+                showReaction(`🤮 ${aiFood.name}!`);
+                pet.chaos += aiFood.chaos;
+                sound.hiss();
+                haptic([40, 50, 40]);
+            } else {
+                sound.munch();
+                haptic(25);
+                pet.hunger += aiFood.hunger;
+                pet.chaos += aiFood.chaos;
+                pet.grease += aiFood.grease;
+                showReaction(`*NOM* ${aiFood.name}!`);
+                if (aiFood.chaos > 15) notifyChat(`✨ *AI Forage:* Jimothy devoured an AI-generated **${aiFood.name}**! (${aiFood.desc})`);
+            }
+            setLog(`AI: ${aiFood.desc}`);
+            updateHUD();
+        }
+      } catch (e) {
+        document.getElementById('jimothyGraphic').classList.remove('shake-anim');
+        setLog("AI Dimension closed! (Using local trash)");
+        triggerRandomAntics();
+      }
+      isGeneratingAI = false;
+    }
+
     function clearIdleAnims() {
        const juggleG = document.getElementById('juggleProps');
        const plateG = document.getElementById('plateProps');
@@ -746,13 +822,14 @@
        
        renderBattleScreen();
        sound.fanfare();
+       haptic([100, 50, 100]);
        setLog(`A wild ${battle.enemy.name} wants your trash!`);
     }
 
     function renderBattleScreen() {
        const arena = document.getElementById('gameArena');
        document.getElementById('gameTimer').textContent = `HP: ${battle.hp}`;
-       document.getElementById('gameInstructions').textContent = "[A]BITE [B]BLOCK [SEL]THROW [START]FLEE";
+       document.getElementById('gameInstructions').textContent = "[A]BITE [B]BLOCK [SEL]THROW [STR]FLEE";
        
        arena.innerHTML = `
         <div class="w-full h-full flex flex-col justify-between p-2" style="color: var(--lcd-pixel);">
@@ -775,16 +852,19 @@
     function playerBattleAction(btn) {
        if (btn === 'A') { // BITE
           sound.munch();
+          haptic(30);
           battle.enemyHp -= 25;
           showReaction("BITE!");
        } else if (btn === 'B') { // BLOCK
           sound.scuttle();
+          haptic(20);
           battle.isBlocking = true;
           showReaction("BLOCK!");
        } else if (btn === 'SELECT') { // THROW
           if (pet.hunger >= 5) {
              pet.hunger -= 5;
              sound.thud();
+             haptic([40, 50, 40]);
              battle.enemyHp -= 40;
              showReaction("YEET!");
              updateHUD();
@@ -796,10 +876,12 @@
        } else if (btn === 'START') { // FLEE
           if (Math.random() > 0.5) {
              sound.scuttle();
+             haptic(15);
              endBattle(false, "Got away safely!");
              return;
           } else {
              sound.beep();
+             haptic([40, 50, 40]);
              showReaction("Failed to flee!");
           }
        }
@@ -823,6 +905,7 @@
 
        battle.hp -= dmg;
        showReaction(`${battle.enemy.name} attacked!`);
+       haptic([40, 50, 40]);
        document.getElementById('jimothyGraphic').classList.add('shake-anim');
        setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 300);
 
@@ -859,7 +942,6 @@
           pet.hunger = Math.max(0, pet.hunger - 20);
           pet.energy = Math.max(0, pet.energy - 30);
           
-          // Steal item logic
           let availableItems = [];
           if (pet.inventory) {
               availableItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0);
@@ -874,7 +956,6 @@
           } else {
               msg += ` You were too broke to rob!`;
           }
-          
           setLog(msg);
        }
        updateHUD();
@@ -902,12 +983,11 @@
       rankBadge: document.getElementById('rankBadge'), crown: document.getElementById('crownSlot')
     };
 
-    // Controls
     const btnA = document.getElementById('btnA');
     const btnB = document.getElementById('btnB');
     const btnSelect = document.getElementById('btnSelect');
     const btnStart = document.getElementById('btnStart');
-    const btnMenu = document.getElementById('btnMenu'); // Replaced AI/Reset with Menu
+    const btnMenu = document.getElementById('btnMenu'); 
 
     function showReaction(text, duration = 1600) {
       elements.bubble.textContent = text;
@@ -915,6 +995,7 @@
       setTimeout(() => elements.bubble.style.opacity = '0', duration);
     }
     function setLog(msg) { elements.log.textContent = msg; }
+    
     function saveState() {
       pet.lastSaved = Date.now();
       localStorage.setItem(STATE_KEY, JSON.stringify(pet));
@@ -926,10 +1007,10 @@
         if (saved) {
           const parsed = JSON.parse(saved);
           pet = { ...pet, ...parsed };
-          pet.inMiniGame = false; // Never resume directly into a minigame
-          pet.inHeistGame = false; // Never resume into a heist
-          pet.inventory = pet.inventory || {}; // Ensure inventory object exists
-          pet.level = pet.level || 1; // Backwards compatibility for old saves
+          pet.inMiniGame = false;
+          pet.inHeistGame = false;
+          pet.inventory = pet.inventory || {};
+          pet.level = pet.level || 1; 
           pet.xp = pet.xp || 0;
           pet.awardsUnlocked = pet.awardsUnlocked || [];
           
@@ -937,15 +1018,13 @@
             const now = Date.now();
             const diffMs = now - pet.lastSaved;
             const diffMinutes = Math.floor(diffMs / 60000);
-            const diff10s = Math.floor(diffMs / 10000); // Game loop ticks every 10s
+            const diff10s = Math.floor(diffMs / 10000);
             
             if (diff10s > 0) {
               pet.ageMinutes += diffMinutes;
               if (pet.isSleeping) {
-                // Only energy regenerates while asleep
                 pet.energy = Math.min(100, pet.energy + (8 * diff10s));
               } else {
-                // Full offline progression if left awake
                 pet.hunger = Math.max(0, pet.hunger - (2.5 * diff10s));
                 pet.chaos = Math.min(100, pet.chaos + (2 * diff10s));
                 pet.grease = Math.max(0, pet.grease - (1 * diff10s));
@@ -961,18 +1040,18 @@
     function gainXp(amount) {
       pet.xp += amount;
       let leveledUp = false;
-      // Exponential XP scaling curve for higher ranks
       let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
       
       while (pet.xp >= xpReq) {
         pet.xp -= xpReq;
         pet.level++;
         leveledUp = true;
-        pet.energy = 100; // Fully restore energy on level up
+        pet.energy = 100;
         xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
       }
       
       if (leveledUp) {
+        haptic([100, 50, 100, 50, 200]);
         pet.awardsUnlocked = pet.awardsUnlocked || [];
         const MILESTONES = [
           { level: 5, emoji: "🥉", name: "BRONZE BIN" },
@@ -1008,6 +1087,7 @@
         
         setLog(`Jimothy leveled up to LVL ${pet.level}! Energy restored.`);
         checkEvolution();
+        notifyChat(`⭐ *LEVEL UP!* Jimothy is now Level ${pet.level}!`);
       }
     }
 
@@ -1034,7 +1114,6 @@
     function checkEvolution() {
       const oldStage = pet.stage;
       
-      // Evolutions are now gated by both Level AND stats!
       if (pet.level >= 20 && pet.shinyCaps >= 25 && pet.chaos >= 90) pet.stage = 'deity';
       else if (pet.level >= 10 && pet.shinyCaps >= 10 && pet.chaos >= 70) pet.stage = 'emperor';
       else if (pet.level >= 5 && pet.grease >= 75) pet.stage = 'goblin';
@@ -1052,19 +1131,18 @@
         sound.fanfare();
         showReaction("⚡ EVOLVED! ⚡", 2500);
         notifier.send('evolve', 'Jimothy Mutated! ⚡', `God help us all, he's now a ${title}...`, 0);
+        notifyChat(`⚡ *EVOLUTION!* Jimothy has mutated into a **${title}**!`);
       }
       
       let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
       elements.rankBadge.textContent = `LVL ${pet.level} ${title}`;
-      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`; // Hover for XP progress
+      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`; 
     }
 
-    // Menu System Variables & Logic
     let isMenuOpen = false;
     let menuIndex = 0;
     const MENU_OPTIONS = ["✨ AI FORAGE", "🎒 INVENTORY", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
 
-    // Inventory System Variables & Logic
     let isInventoryOpen = false;
     let invIndex = 0;
     let invItems = [];
@@ -1165,22 +1243,19 @@
 
     function executeMenuOption() {
       const opt = MENU_OPTIONS[menuIndex];
-      toggleMenu(); // Close menu
+      toggleMenu(); 
       
       if (opt.includes("NAP")) {
         toggleNap();
       } else if (opt.includes("LINT")) {
-        btnStart.click(); // Reuse lint logic
+        btnStart.click(); 
       } else if (opt.includes("INVENTORY")) {
         toggleInventory();
       } else if (opt.includes("HEIST")) {
         initHeistGame();
       } else if (opt.includes("RESET")) {
-        // Explicitly wipe the local storage save data
         localStorage.removeItem(STATE_KEY); 
-        
         pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [], inMiniGame: false, inHeistGame: false };
-        
         if (pet.inMiniGame || pet.inHeistGame) {
           clearInterval(miniGameInterval);
           if (typeof heistInterval !== 'undefined') clearInterval(heistInterval);
@@ -1189,8 +1264,6 @@
           pet.inMiniGame = false;
           pet.inHeistGame = false;
         }
-        
-        // Wake him up visually if he was napping
         elements.graphic.classList.add('idle-anim');
         elements.eyes.style.display = 'block';
         elements.sleepZzz.style.display = 'none';
@@ -1205,12 +1278,11 @@
         setLog("A fresh Jimothy crawled out of the recycling bin.");
         updateHUD();
       } else if (opt.includes("AI FORAGE")) {
-         triggerRandomAntics();
+         generateAIFood();
       }
     }
 
     function updateHUD() {
-      // Clamping values 0 to 150 for fatness
       pet.hunger = Math.min(150, Math.max(0, pet.hunger));
       pet.chaos = Math.min(100, Math.max(0, pet.chaos));
       pet.grease = Math.min(100, Math.max(0, pet.grease));
@@ -1220,7 +1292,7 @@
       elements.hunger.textContent = `${Math.round(pet.hunger)}%`;
       
       if (pet.hunger > 100) {
-         elements.hungerBar.style.backgroundColor = '#fbbf24'; // Warning color
+         elements.hungerBar.style.backgroundColor = '#fbbf24'; 
          document.getElementById('jimothyGraphic').style.transform = `scaleX(${1 + (pet.hunger - 100) / 100})`;
       } else {
          elements.hungerBar.style.backgroundColor = 'var(--lcd-pixel)';
@@ -1229,18 +1301,14 @@
 
       elements.chaosBar.style.width = `${pet.chaos}%`;
       elements.chaos.textContent = `${Math.round(pet.chaos)}%`;
-
       elements.greaseBar.style.width = `${pet.grease}%`;
       elements.grease.textContent = `${Math.round(pet.grease)}%`;
-
       elements.energyBar.style.width = `${pet.energy}%`;
       elements.energy.textContent = `${Math.round(pet.energy)}%`;
-
       elements.capsVal.textContent = pet.shinyCaps;
 
       checkEvolution();
       updateClockDisplay();
-      
       saveState();
     }
 
@@ -1260,8 +1328,7 @@
 
       const celestialBody = document.getElementById('celestialBody');
       const streetLightBeam = document.getElementById('streetLightBeam');
-      
-      let f; // 0.0 to 1.0 representing progress through the day or night
+      let f; 
       
       if (isDay) {
          f = (hrs - 6 + mins/60) / 12;
@@ -1292,7 +1359,6 @@
          }
       }
 
-      // Parabolic arc for the Sun/Moon across the LCD sky
       if (celestialBody) {
          const x = 20 + (f * 90); 
          const y = 25 - (Math.sin(f * Math.PI) * 18);
@@ -1313,6 +1379,7 @@
       
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
       sound.thud();
+      haptic([40, 50, 40]);
       elements.graphic.classList.remove('idle-anim');
       elements.graphic.style.transform = 'scale(1.5) translateY(10px)';
       
@@ -1396,23 +1463,20 @@
       pet.ageMinutes += 1;
       if (pet.isSleeping) {
         pet.energy = Math.min(100, pet.energy + 8);
-        gainXp(1); // Passive rest XP
-        // Hunger, chaos, and grease are COMPLETELY PAUSED while sleeping!
+        gainXp(1); 
       } else {
         pet.hunger = Math.max(0, pet.hunger - 2.5);
         pet.chaos = Math.min(100, pet.chaos + 2);
         pet.grease = Math.max(0, pet.grease - 1);
         pet.energy = Math.max(0, pet.energy - 1.5);
 
-        // Notifications for critical states (cooldown prevents spamming)
         if (pet.hunger < 20) {
-          notifier.send('hunger', 'Starvation Imminent! 🥫', 'Jimothy is chewing the drywall. Feed him some trash before he eats your router!', 120000);
+          notifier.send('hunger', 'Starvation Imminent! 🥫', 'Jimothy is chewing the drywall. Feed him!', 120000);
           if (!pet.inMiniGame && !pet.inHeistGame && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
         } else if (pet.chaos > 85) {
-          notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. You might want to check on him before he devours your fridge...', 120000);
+          notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. Coax him!', 120000);
         }
 
-        // Throw condition logic!
         if (pet.chaos >= 60 && pet.hunger < 50 && Math.random() < 0.4) {
             if (!isAnimatingThrow) throwTrashAtScreen();
         } else if (Math.random() < 0.20) {
@@ -1420,7 +1484,6 @@
         } else if (Math.random() < 0.15 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
           triggerRandomEncounter();
         } else if (Math.random() < 0.20 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
-          // Play idle animations
           const anims = ['juggle', 'plates'];
           const picked = anims[Math.floor(Math.random() * anims.length)];
           const juggleG = document.getElementById('juggleProps');
@@ -1434,12 +1497,9 @@
              juggleG.style.display = 'none';
              setLog("Jimothy is spinning plates!");
           }
-          setTimeout(() => {
-             clearIdleAnims();
-          }, 6000);
+          setTimeout(() => clearIdleAnims(), 6000);
         } else {
-          gainXp(3); // Passive survival XP
-          // Palace Building Mechanics
+          gainXp(3); 
           let didBuild = false;
           let didRearrange = false;
 
@@ -1450,14 +1510,12 @@
               if (Math.random() < 0.35) didRearrange = true;
               if (Math.random() < 0.4) setLog("RAID FRENZY! Palace building accelerated!");
           } else if (pet.hunger >= 20) {
-              // Costs 3 TRASH (Hunger) to actively build his home
               pet.hunger -= 3;
               pet.trashCollected = (pet.trashCollected || 0) + 2;
               didBuild = true;
-              if (Math.random() < 0.15) didRearrange = true; // 15% chance to rearrange during normal build
+              if (Math.random() < 0.15) didRearrange = true; 
               if (Math.random() < 0.2) setLog("Jimothy spent some TRASH to upgrade his palace.");
           } else {
-              // Too hungry to build effectively
               pet.trashCollected = (pet.trashCollected || 0) + 0.2;
               if (Math.random() < 0.2) setLog("Need more TRASH to build palace...");
           }
@@ -1469,20 +1527,15 @@
 
           if (didBuild && !isAnimatingThrow && !pet.isSleeping && !pet.inMiniGame && !pet.inHeistGame) {
               if (Math.random() < 0.4 || didRearrange) {
-                  // Play scurry animation
                   elements.graphic.classList.remove('idle-anim');
                   elements.graphic.classList.add('scurry-anim');
                   sound.scuttle();
-                  
                   setTimeout(() => {
                       elements.graphic.classList.remove('scurry-anim');
-                      if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) {
-                          elements.graphic.classList.add('idle-anim');
-                      }
-                  }, didRearrange ? 2500 : 1200); // Longer scurry if he is completely rearranging it
+                      if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) elements.graphic.classList.add('idle-anim');
+                  }, didRearrange ? 2500 : 1200); 
               }
           }
-          
           drawTrashPalace();
         }
       }
@@ -1492,7 +1545,6 @@
     function toggleNap() {
       if (pet.inMiniGame) return;
       pet.isSleeping = !pet.isSleeping;
-      
       const dreamBubble = document.getElementById('dreamBubble');
       
       if (pet.isSleeping) {
@@ -1579,16 +1631,17 @@
       if (btn === 'A') {
         if (dogWaking >= 3) {
           sound.hiss();
-          dogWaking += 2; // Instant punish for looting while watched
+          haptic([40, 50, 40]);
+          dogWaking += 2; 
           renderGameScreen();
         } else {
           sound.munch();
+          haptic(30);
           cansTipped++;
           dogWaking = Math.min(3, dogWaking + 1);
           
-          if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++; // Fat penalty clumsy
+          if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++; 
           
-          // Random item drop chance during raids
           if (Math.random() > 0.8) {
              const itemKeys = Object.keys(ITEM_DB);
              const randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
@@ -1605,10 +1658,12 @@
       } else if (btn === 'B') {
         if (pet.hunger > 100 && Math.random() < 0.3) {
            sound.thud();
-           showReaction("Too fat to hide!"); // Fat penalty failure
+           haptic([40, 50, 40]);
+           showReaction("Too fat to hide!"); 
         } else {
            sound.scuttle();
-           dogWaking = Math.max(0, dogWaking - 1); // Hide and calm down
+           haptic(20);
+           dogWaking = Math.max(0, dogWaking - 1); 
         }
         renderGameScreen();
       }
@@ -1623,16 +1678,18 @@
 
       if (won) {
         sound.fanfare();
+        haptic([100, 50, 100, 50, 200]);
         let loot = cansTipped * 15;
         pet.trashCollected = (pet.trashCollected || 0) + loot;
-        pet.hunger = Math.min(100, pet.hunger + (cansTipped * 8)); // Replenish his TRASH meter
-        pet.raidFrenzy = 6; // 60 seconds of free accelerated building
+        pet.hunger = Math.min(150, pet.hunger + (cansTipped * 8)); 
+        pet.raidFrenzy = 6; 
         pet.chaos += 10;
         pet.grease += 5;
-        gainXp(50 + (cansTipped * 10)); // Massive XP reward for raiding
+        gainXp(50 + (cansTipped * 10)); 
         showReaction(`👑 +${loot} TRASH!`);
         message = `Looted ${cansTipped} bins & triggered a BUILD FRENZY!`;
       } else {
+        haptic([40, 50, 40]);
         document.getElementById('jimothyGraphic').classList.remove('idle-anim');
         document.getElementById('jimothyGraphic').classList.add('shake-anim');
         setTimeout(() => { 
@@ -1673,12 +1730,8 @@
       heistInterval = setInterval(() => {
         heistTimerVal--;
         document.getElementById('gameTimer').textContent = `TIME: ${heistTimerVal}s`;
-        
-        // Suspicion slowly ticks up naturally
         if (Math.random() > 0.3) suspicion += 10;
-        
         renderHeistScreen();
-
         if (suspicion >= 100) {
           endHeistGame(false, "🔦 BUSTED! The homeowner caught you!");
         } else if (heistTimerVal <= 0) {
@@ -1717,14 +1770,15 @@
       if (btn === 'A') {
         if (suspicion >= 85) {
           sound.hiss();
-          suspicion += 20; // Instant bust
+          haptic([40, 50, 40]);
+          suspicion += 20;
           renderHeistScreen();
         } else {
           sound.munch();
+          haptic(30);
           heistLoot++;
           suspicion += 15 + Math.floor(Math.random() * 10);
           
-          // High random item drop chance during heist
           if (Math.random() > 0.5) {
              const itemKeys = Object.keys(ITEM_DB);
              const randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
@@ -1739,7 +1793,8 @@
         }
       } else if (btn === 'B') {
         sound.scuttle();
-        suspicion = Math.max(0, suspicion - 30); // Freeze and drop suspicion
+        haptic(20);
+        suspicion = Math.max(0, suspicion - 30); 
         showReaction("Frozen...");
         renderHeistScreen();
       }
@@ -1754,14 +1809,16 @@
 
       if (won) {
         sound.fanfare();
+        haptic([100, 50, 100, 50, 200]);
         let lootTrash = heistLoot * 10;
         pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
         pet.hunger = Math.min(150, pet.hunger + (heistLoot * 5)); 
         pet.chaos += 20;
-        pet.shinyCaps += Math.floor(heistLoot / 2); // Good caps reward
+        pet.shinyCaps += Math.floor(heistLoot / 2); 
         gainXp(100 + (heistLoot * 15)); 
         showReaction(`👑 HEIST SUCCESS!`);
       } else {
+        haptic([40, 50, 40]);
         document.getElementById('jimothyGraphic').classList.remove('idle-anim');
         document.getElementById('jimothyGraphic').classList.add('shake-anim');
         setTimeout(() => { 
@@ -1769,11 +1826,8 @@
             if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim');
         }, 700);
         showReaction("🚨 BUSTED!");
-        
-        // Penalty
         pet.hunger = Math.max(0, pet.hunger - 20);
         
-        // Lose a random item
         let availableItems = Object.keys(pet.inventory || {}).filter(k => pet.inventory[k] > 0);
         if (availableItems.length > 0) {
             const stolenItemKey = availableItems[Math.floor(Math.random() * availableItems.length)];
@@ -1792,17 +1846,15 @@
       if (!g) return;
       
       const seed = pet.palaceSeed || 0.5;
-      // Generate pseudo-random offsets for each tier based on the single seed
-      const offset1 = ((seed * 123) % 1) * 20; // 0 to 20
-      const offset2 = ((seed * 456) % 1) * 30 - 10; // -10 to 20
-      const offset3 = ((seed * 789) % 1) * 30 - 5; // -5 to 25
-      const offset4 = ((seed * 321) % 1) * 30 - 15; // -15 to 15
-      const offset5 = ((seed * 654) % 1) * 20 - 10; // -10 to 10
+      const offset1 = ((seed * 123) % 1) * 20; 
+      const offset2 = ((seed * 456) % 1) * 30 - 10; 
+      const offset3 = ((seed * 789) % 1) * 30 - 5; 
+      const offset4 = ((seed * 321) % 1) * 30 - 15; 
+      const offset5 = ((seed * 654) % 1) * 20 - 10; 
 
       let html = '';
 
       if (tc > 30) {
-        // Level 1: Cardboard Box Base
         html += `<g transform="translate(${offset1}, 0)">
                  <path d="M 5,65 L 5,45 L 30,45 L 30,65" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
                  <line x1="5" y1="48" x2="30" y2="48" stroke-width="1" stroke="var(--lcd-pixel)"/>
@@ -1811,7 +1863,6 @@
                  </g>`;
       }
       if (tc > 90) {
-        // Level 2: Pizza boxes & Milk Crate
         html += `<g transform="translate(${offset2}, 0)">
                  <rect x="32" y="60" width="18" height="2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
                  <rect x="33" y="57" width="16" height="2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
@@ -1823,7 +1874,6 @@
                  </g>`;
       }
       if (tc > 180) {
-        // Level 3: Tire & Broken TV
         html += `<g transform="translate(${offset3}, 0)">
                  <circle cx="45" cy="55" r="7" fill="none" stroke-width="2" stroke="var(--lcd-pixel)"/>
                  <circle cx="45" cy="55" r="3" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
@@ -1834,7 +1884,6 @@
                  </g>`;
       }
       if (tc > 300) {
-        // Level 4: Ramps and Flag
         html += `<g transform="translate(${offset4}, 0)">
                  <line x1="30" y1="45" x2="52" y2="65" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
                  <line x1="32" y1="44" x2="54" y2="64" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
@@ -1844,28 +1893,27 @@
                  </g>`;
       }
       if (tc > 500) {
-        // Level 5: The Grand Canopy & Fairy Lights
         html += `<g transform="translate(${offset5}, 0)">
                  <path d="M -5,10 Q 20,-5 45,10 Z" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
                  <line x1="20" y1="10" x2="20" y2="20" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <!-- Fairy Lights string with flicker animation -->
                  <path d="M -5,10 Q 10,20 25,10 Q 35,18 45,10" fill="none" stroke-dasharray="1,4" stroke-width="2" stroke="var(--lcd-pixel)" class="flicker-anim"/>
-                 <!-- Star topper with twinkle animation -->
                  <polygon points="20,-2 22,2 26,2 23,5 24,9 20,7 16,9 17,5 14,2 18,2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)" class="twinkle-anim"/>
                  </g>`;
       }
 
       g.innerHTML = html;
-      g.style.opacity = '0.45'; // Blend nicely but stay visible
+      g.style.opacity = '0.45'; 
     }
 
     btnMenu.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims();
       if (isInventoryOpen) toggleInventory();
       else toggleMenu();
     });
 
     btnA.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('A'); return; }
@@ -1905,9 +1953,10 @@
         setTimeout(() => { elements.graphic.classList.remove('shake-anim'); elements.graphic.classList.add('idle-anim'); }, 700);
         showReaction("🤮 GROSS!");
         sound.hiss();
+        haptic([40, 50, 40]);
         gainXp(5);
       } else {
-        if (food.hunger > 30) sound.trill(); // Very good food triggers a happy trill
+        if (food.hunger > 30) sound.trill(); 
         else sound.munch();
         showReaction(`*NOM* ${food.name}!`);
         gainXp(15 + food.hunger);
@@ -1918,6 +1967,7 @@
     });
 
     btnB.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('B'); return; }
@@ -1926,7 +1976,7 @@
          return;
       }
       if (isMenuOpen) {
-        toggleMenu(); // B cancels/exits the menu
+        toggleMenu(); 
         return;
       }
       if (pet.inMiniGame) {
@@ -1941,6 +1991,7 @@
     });
 
     btnSelect.addEventListener('click', () => { 
+      haptic(15);
       clearIdleAnims();
       sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
@@ -1949,6 +2000,7 @@
     });
     
     btnStart.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
@@ -1962,7 +2014,6 @@
       updateHUD();
     });
 
-    // D-Pad Mapping (Poke mechanic or Menu Navigation)
     const pokeAction = () => {
        haptic(25);
        clearIdleAnims();
@@ -1980,6 +2031,7 @@
        if (ev.sfx === 'hiss') {
            elements.graphic.classList.remove('idle-anim');
            elements.graphic.classList.add('shake-anim');
+           haptic([40, 50, 40]);
            setTimeout(() => { elements.graphic.classList.remove('shake-anim'); if(!pet.isSleeping) elements.graphic.classList.add('idle-anim'); }, 700);
        }
        
@@ -2016,38 +2068,23 @@
     });
 
     document.getElementById('deviceToggleBtn').addEventListener('click', () => {
-      sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000);
+      haptic(15); sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000);
     });
     document.getElementById('colorToggleBtn').addEventListener('click', () => {
-      sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000);
+      haptic(15); sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000);
     });
     document.getElementById('lcdToggleBtn').addEventListener('click', () => {
-      sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000);
+      haptic(15); sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000);
     });
     
     document.getElementById('notifToggleBtn').addEventListener('click', async (e) => {
+      haptic(15);
       sound.beep();
       const isEnabled = await notifier.toggle();
       e.target.textContent = isEnabled ? '🔔' : '🔕';
       showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500);
     });
 
-    document.getElementById('hapticToggleBtn').addEventListener('click', (e) => {
-      sound.beep();
-      prefs.hapticsEnabled = !prefs.hapticsEnabled;
-      e.target.textContent = prefs.hapticsEnabled ? '📳' : '📴';
-      applyPrefs();
-      showReaction(prefs.hapticsEnabled ? "📳 Haptics ON" : "📴 Haptics OFF", 1500);
-      if (prefs.hapticsEnabled) haptic([30, 30, 30]);
-    });
-
-    document.getElementById('soundToggleBtn').addEventListener('click', (e) => {
-      const isMuted = sound.toggleMute();
-      e.target.textContent = isMuted ? '🔇' : '🔊';
-      if (!isMuted) sound.beep();
-    });
-
-    // Keyboard bindings
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
       if (e.key === 'ArrowUp') document.getElementById('dpadUp').click();
@@ -2058,11 +2095,11 @@
       if (e.key.toLowerCase() === 'b' || e.key === '2') btnB.click();
     });
 
+    // Boot up
     loadPrefs();
     loadState();
     updateHUD();
     
-    // Check sleep state on load to update visuals properly
     if (pet.isSleeping) {
        elements.graphic.classList.remove('idle-anim');
        elements.eyes.style.display = 'none';
