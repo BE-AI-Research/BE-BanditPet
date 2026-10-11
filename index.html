@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BE-BandiPet Jima-Gotchi: Pocket-sized Raccoon Virtual "Pet Terrorist"</title>
-  
+  <title>Jima-Gotchi: Pocket-sized Raccoon Virtual "Pet Terrorist"</title>
   <!-- Raccoon Favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦝</text></svg>">
   <!-- Tailwind CSS CDN -->
@@ -14,6 +13,16 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
   
+  <!-- Import map for Three.js and WebXR ARButton -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
   <style>
     :root {
       /* Theme Defaults */
@@ -38,6 +47,24 @@
       user-select: none;
       -webkit-user-select: none;
       touch-action: manipulation;
+      margin: 0;
+      overflow: hidden; /* Prevent scrolling, especially important for AR */
+    }
+
+    /* Important: Hide the main UI when in AR mode */
+    body.ar-active .toy-shell-container {
+      display: none !important;
+    }
+    /* Style the AR Button injected by Three.js */
+    #ARButton {
+      z-index: 9999; /* Ensure it's above everything */
+      background-color: var(--brand-text) !important;
+      color: var(--shell-bg-3) !important;
+      font-family: 'Press Start 2P', monospace !important;
+      font-size: 10px !important;
+      border: 2px solid var(--shell-bg-3) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.5) !important;
     }
 
     .lcd-screen {
@@ -163,7 +190,11 @@
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 select-none text-slate-100 overflow-x-hidden">
 
-  <div class="relative w-full h-[95vh] min-h-[650px] max-w-[600px] flex flex-col items-center">
+  <!-- Container for the Three.js AR View (Hidden by default, used when AR is active) -->
+  <div id="ar-container" class="absolute inset-0 z-0 pointer-events-none"></div>
+
+  <!-- The main UI wrapped in a container so we can hide it during AR -->
+  <div class="relative w-full h-[95vh] min-h-[650px] max-w-[600px] flex flex-col items-center toy-shell-container z-10">
     
     <!-- Handheld Body Container (Dynamically scaled via flex) -->
     <div class="toy-shell w-full h-full p-4 sm:p-6 relative z-10 flex flex-col items-center justify-between">
@@ -181,6 +212,8 @@
 
       <!-- Settings Icon Row -->
       <div class="w-full flex justify-end space-x-2 mb-2 px-2">
+        <!-- New AR Mode Button -->
+        <button id="arToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Toggle AR Mode">🕶️</button>
         <button id="deviceToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Device Shape">📱</button>
         <button id="colorToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Shell Color">🎨</button>
         <button id="lcdToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Screen Backlight">💡</button>
@@ -509,7 +542,186 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    // --- THREE.JS AR SETUP ---
+    import * as THREE from 'three';
+    import { ARButton } from 'three/addons/webxr/ARButton.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // AR 3D MODEL CONFIGURATION
+    // Paste the URL to your .gltf or .glb file here. 
+    // If left empty, a procedural 3D blocky raccoon will be generated for testing.
+    const AR_MODEL_URL = ""; 
+
+    let arCamera, arScene, arRenderer, arModel;
+    let isARMode = false;
+
+    function initAR() {
+      const arContainer = document.getElementById('ar-container');
+      
+      arScene = new THREE.Scene();
+      
+      arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      light.position.set(0.5, 1, 0.25);
+      arScene.add(light);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(1, 2, 1);
+      arScene.add(directionalLight);
+
+      arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      arRenderer.setPixelRatio(window.devicePixelRatio);
+      arRenderer.setSize(window.innerWidth, window.innerHeight);
+      arRenderer.xr.enabled = true;
+      
+      arContainer.appendChild(arRenderer.domElement);
+
+      // Create and append the AR Button
+      const arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
+      document.body.appendChild(arBtn);
+      
+      // Listen for AR session start/end to toggle UI visibility
+      arRenderer.xr.addEventListener('sessionstart', () => {
+          isARMode = true;
+          document.body.classList.add('ar-active');
+      });
+      arRenderer.xr.addEventListener('sessionend', () => {
+          isARMode = false;
+          document.body.classList.remove('ar-active');
+      });
+
+      if (AR_MODEL_URL) {
+         // Load external glTF/glb
+         const loader = new GLTFLoader();
+         loader.load(
+            AR_MODEL_URL,
+            function (gltf) {
+               arModel = gltf.scene;
+               // Position it slightly in front of the camera so it's immediately visible
+               arModel.position.set(0, 0, -1);
+               // Adjust scale as necessary. 0.1 is often a good starting point for arbitrary models
+               arModel.scale.set(0.1, 0.1, 0.1);
+               arScene.add(arModel);
+            },
+            undefined,
+            function (error) {
+               console.error('An error happened loading the 3D model:', error);
+               createProceduralRaccoon(); // Fallback if loading fails
+            }
+         );
+      } else {
+         createProceduralRaccoon();
+      }
+
+      window.addEventListener('resize', onWindowResize, false);
+      arRenderer.setAnimationLoop(renderAR);
+    }
+
+    function createProceduralRaccoon() {
+      // Procedural Blocky Raccoon as a fallback
+      arModel = new THREE.Group();
+      
+      const matBody = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
+      const matStripe = new THREE.MeshStandardMaterial({ color: 0x111111 });
+      const matBelly = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+      
+      // Body
+      const bodyGeo = new THREE.BoxGeometry(0.2, 0.25, 0.2);
+      const body = new THREE.Mesh(bodyGeo, matBody);
+      body.position.y = 0.125;
+      arModel.add(body);
+      
+      // Belly
+      const bellyGeo = new THREE.BoxGeometry(0.15, 0.2, 0.02);
+      const belly = new THREE.Mesh(bellyGeo, matBelly);
+      belly.position.set(0, 0.1, 0.1);
+      arModel.add(belly);
+
+      // Head
+      const headGeo = new THREE.BoxGeometry(0.18, 0.15, 0.18);
+      const head = new THREE.Mesh(headGeo, matBody);
+      head.position.y = 0.32;
+      arModel.add(head);
+      
+      // Mask
+      const maskGeo = new THREE.BoxGeometry(0.19, 0.06, 0.19);
+      const mask = new THREE.Mesh(maskGeo, matStripe);
+      mask.position.y = 0.33;
+      arModel.add(mask);
+
+      // Snout
+      const snoutGeo = new THREE.BoxGeometry(0.08, 0.05, 0.08);
+      const snout = new THREE.Mesh(snoutGeo, matBelly);
+      snout.position.set(0, 0.28, 0.1);
+      arModel.add(snout);
+
+      // Ears
+      const earGeo = new THREE.ConeGeometry(0.04, 0.08, 4);
+      const earL = new THREE.Mesh(earGeo, matBody);
+      earL.position.set(-0.06, 0.42, 0);
+      const earR = new THREE.Mesh(earGeo, matBody);
+      earR.position.set(0.06, 0.42, 0);
+      arModel.add(earL);
+      arModel.add(earR);
+
+      // Tail
+      const tailGroup = new THREE.Group();
+      const tailSeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.08), matBody);
+      const tailSeg2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.07), matStripe);
+      const tailSeg3 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), matBody);
+      tailSeg2.position.y = 0.09;
+      tailSeg3.position.y = 0.16;
+      tailGroup.add(tailSeg1);
+      tailGroup.add(tailSeg2);
+      tailGroup.add(tailSeg3);
+      tailGroup.position.set(0, 0.05, -0.1);
+      tailGroup.rotation.x = -Math.PI / 4;
+      arModel.add(tailGroup);
+
+      // Position in front of camera initially
+      arModel.position.set(0, 0, -1);
+      arScene.add(arModel);
+    }
+
+    function onWindowResize() {
+      if(arCamera && arRenderer) {
+         arCamera.aspect = window.innerWidth / window.innerHeight;
+         arCamera.updateProjectionMatrix();
+         arRenderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    }
+
+    function renderAR(timestamp, frame) {
+      if (arRenderer && arScene && arCamera) {
+          // Simple idle animation for the 3D model if it exists
+          if (arModel && isARMode) {
+              const time = performance.now() * 0.001;
+              arModel.position.y = Math.sin(time * 2) * 0.02; // Gentle bobbing
+              arModel.rotation.y = Math.sin(time) * 0.1; // Gentle swaying
+          }
+          arRenderer.render(arScene, arCamera);
+      }
+    }
+
+    // Initialize AR on load
+    initAR();
+
+    // Hook up the custom UI button to trigger the hidden WebXR button
+    document.getElementById('arToggleBtn').addEventListener('click', () => {
+       const webxrButton = document.getElementById('ARButton');
+       if(webxrButton) {
+           haptic(15);
+           sound.beep();
+           webxrButton.click();
+       } else {
+           setLog("AR not supported on this device/browser.");
+           showReaction("AR Failed!");
+       }
+    });
+
+    // --- ORIGINAL GAME LOGIC ---
     class RetroSound {
       constructor() { this.ctx = null; this.muted = false; }
       init() {
@@ -588,7 +800,7 @@
         osc.start(); osc.stop(this.ctx.currentTime + 0.12);
       }
     }
-    const sound = new RetroSound();
+    window.sound = new RetroSound(); // Make global for UI
 
     class PushNotifier {
       constructor() {
@@ -627,7 +839,7 @@
       }
       
       testSend() {
-        if(this.enabled) new Notification("Jimothy-Gotchi", { body: "Notifications enabled! 🦝" });
+        if(this.enabled) new Notification("Jima-Gotchi", { body: "Notifications enabled! 🦝" });
       }
 
       send(type, title, body, cooldown = 60000) {
@@ -644,7 +856,7 @@
         }
       }
     }
-    const notifier = new PushNotifier();
+    window.notifier = new PushNotifier(); // Make global
 
     const SHAPES = [
       "12px 12px 40px 40px", // Classic Gameboy
@@ -668,9 +880,9 @@
     ];
 
     let prefs = { shapeIdx: 0, themeIdx: 0, lcdIdx: 0, hapticsEnabled: true };
-    const PREFS_KEY = 'jimothy_theme_prefs';
+    const PREFS_KEY = 'jima_theme_prefs';
 
-    function haptic(pattern) {
+    window.haptic = function(pattern) {
       if (prefs.hapticsEnabled && 'vibrate' in navigator) {
         try { navigator.vibrate(pattern); } catch(e) {}
       }
@@ -710,7 +922,7 @@
        applyPrefs();
     }
 
-    const STATE_KEY = 'jimothy_tamagotchi_save';
+    const STATE_KEY = 'jima_tamagotchi_save';
     let pet = {
       name: "Jimothy", ageMinutes: 1, hunger: 75, chaos: 50, grease: 65, energy: 70,
       shinyCaps: 3, stage: 'kit', isSleeping: false, lastSaved: Date.now(), inMiniGame: false, inHeistGame: false,
@@ -721,80 +933,6 @@
     let isGeneratingAI = false;
     let isAnimatingThrow = false;
     let battle = { active: false, enemy: null, hp: 100, maxHp: 100, enemyHp: 100, enemyMaxHp: 100, isBlocking: false };
-
-    // Google Chat Webhook Integration
-    let chatWebhookUrl = localStorage.getItem('jimothy_chat_webhook') || "";
-    document.getElementById('webhookToggleBtn').addEventListener('click', () => {
-      haptic(15);
-      const url = prompt("Enter a Google Chat Webhook URL to let Jimothy spam your team (Leave blank to disable):", chatWebhookUrl);
-      if (url !== null) {
-        chatWebhookUrl = url.trim();
-        localStorage.setItem('jimothy_chat_webhook', chatWebhookUrl);
-        if (chatWebhookUrl) {
-           setLog("Chat Webhook linked! He's online...");
-           notifyChat("🦝 *Jimothy has entered the chat.* Hide your trash.");
-        } else {
-           setLog("Chat Webhook disconnected.");
-        }
-      }
-    });
-
-    function notifyChat(message) {
-      if (!chatWebhookUrl) return;
-      fetch(chatWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: message })
-      }).catch(e => console.error("Chat Webhook Error:", e));
-    }
-
-    // Gemini API AI Forage
-    async function generateAIFood() {
-      if (isGeneratingAI || pet.inMiniGame || pet.inHeistGame || pet.isSleeping || battle.active) return;
-      isGeneratingAI = true;
-      setLog("Consulting the AI Dumpster...");
-      sound.scuttle();
-      document.getElementById('jimothyGraphic').classList.add('shake-anim');
-      
-      try {
-        const apiKey = ""; // Leave blank or fill if testing outside
-        const payload = {
-            contents: [{ parts: [{ text: "Generate a new trash item for Jimothy the raccoon." }] }],
-            systemInstruction: { parts: [{ text: "Return valid JSON object: {name(string), hunger(-10 to 40), chaos(0 to 30), grease(-10 to 30), desc(string under 40 chars), isGross(boolean)}" }] },
-            generationConfig: { responseMimeType: "application/json" }
-        };
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const result = await response.json();
-        document.getElementById('jimothyGraphic').classList.remove('shake-anim');
-        
-        if (result.candidates) {
-            const aiFood = JSON.parse(result.candidates[0].content.parts[0].text);
-            if (aiFood.isGross) {
-                document.getElementById('jimothyGraphic').classList.add('shake-anim');
-                setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 700);
-                showReaction(`🤮 ${aiFood.name}!`);
-                pet.chaos += aiFood.chaos;
-                sound.hiss();
-                haptic([40, 50, 40]);
-            } else {
-                sound.munch();
-                haptic(25);
-                pet.hunger += aiFood.hunger;
-                pet.chaos += aiFood.chaos;
-                pet.grease += aiFood.grease;
-                showReaction(`*NOM* ${aiFood.name}!`);
-                if (aiFood.chaos > 15) notifyChat(`✨ *AI Forage:* Jimothy devoured an AI-generated **${aiFood.name}**! (${aiFood.desc})`);
-            }
-            setLog(`AI: ${aiFood.desc}`);
-            updateHUD();
-        }
-      } catch (e) {
-        document.getElementById('jimothyGraphic').classList.remove('shake-anim');
-        setLog("AI Dimension closed! (Using local trash)");
-        triggerRandomAntics();
-      }
-      isGeneratingAI = false;
-    }
 
     function clearIdleAnims() {
        const juggleG = document.getElementById('juggleProps');
@@ -822,14 +960,13 @@
        
        renderBattleScreen();
        sound.fanfare();
-       haptic([100, 50, 100]);
        setLog(`A wild ${battle.enemy.name} wants your trash!`);
     }
 
     function renderBattleScreen() {
        const arena = document.getElementById('gameArena');
        document.getElementById('gameTimer').textContent = `HP: ${battle.hp}`;
-       document.getElementById('gameInstructions').textContent = "[A]BITE [B]BLOCK [SEL]THROW [STR]FLEE";
+       document.getElementById('gameInstructions').textContent = "[A]BITE [B]BLOCK [SEL]THROW [START]FLEE";
        
        arena.innerHTML = `
         <div class="w-full h-full flex flex-col justify-between p-2" style="color: var(--lcd-pixel);">
@@ -852,19 +989,16 @@
     function playerBattleAction(btn) {
        if (btn === 'A') { // BITE
           sound.munch();
-          haptic(30);
           battle.enemyHp -= 25;
           showReaction("BITE!");
        } else if (btn === 'B') { // BLOCK
           sound.scuttle();
-          haptic(20);
           battle.isBlocking = true;
           showReaction("BLOCK!");
        } else if (btn === 'SELECT') { // THROW
           if (pet.hunger >= 5) {
              pet.hunger -= 5;
              sound.thud();
-             haptic([40, 50, 40]);
              battle.enemyHp -= 40;
              showReaction("YEET!");
              updateHUD();
@@ -876,12 +1010,10 @@
        } else if (btn === 'START') { // FLEE
           if (Math.random() > 0.5) {
              sound.scuttle();
-             haptic(15);
              endBattle(false, "Got away safely!");
              return;
           } else {
              sound.beep();
-             haptic([40, 50, 40]);
              showReaction("Failed to flee!");
           }
        }
@@ -905,7 +1037,6 @@
 
        battle.hp -= dmg;
        showReaction(`${battle.enemy.name} attacked!`);
-       haptic([40, 50, 40]);
        document.getElementById('jimothyGraphic').classList.add('shake-anim');
        setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 300);
 
@@ -956,6 +1087,7 @@
           } else {
               msg += ` You were too broke to rob!`;
           }
+          
           setLog(msg);
        }
        updateHUD();
@@ -969,7 +1101,6 @@
       { name: "Fresh Broccoli", hunger: -10, chaos: +30, grease: -5, isGross: true, desc: "Hissed and chucked the greens!" }
     ];
 
-    // DOM References
     const elements = {
       hunger: document.getElementById('hungerNum'), hungerBar: document.getElementById('hungerBar'),
       chaos: document.getElementById('chaosNum'), chaosBar: document.getElementById('chaosBar'),
@@ -987,13 +1118,14 @@
     const btnB = document.getElementById('btnB');
     const btnSelect = document.getElementById('btnSelect');
     const btnStart = document.getElementById('btnStart');
-    const btnMenu = document.getElementById('btnMenu'); 
+    const btnMenu = document.getElementById('btnMenu');
 
     function showReaction(text, duration = 1600) {
       elements.bubble.textContent = text;
       elements.bubble.style.opacity = '1';
       setTimeout(() => elements.bubble.style.opacity = '0', duration);
     }
+    
     function setLog(msg) { elements.log.textContent = msg; }
     
     function saveState() {
@@ -1010,7 +1142,7 @@
           pet.inMiniGame = false;
           pet.inHeistGame = false;
           pet.inventory = pet.inventory || {};
-          pet.level = pet.level || 1; 
+          pet.level = pet.level || 1;
           pet.xp = pet.xp || 0;
           pet.awardsUnlocked = pet.awardsUnlocked || [];
           
@@ -1051,7 +1183,6 @@
       }
       
       if (leveledUp) {
-        haptic([100, 50, 100, 50, 200]);
         pet.awardsUnlocked = pet.awardsUnlocked || [];
         const MILESTONES = [
           { level: 5, emoji: "🥉", name: "BRONZE BIN" },
@@ -1087,7 +1218,6 @@
         
         setLog(`Jimothy leveled up to LVL ${pet.level}! Energy restored.`);
         checkEvolution();
-        notifyChat(`⭐ *LEVEL UP!* Jimothy is now Level ${pet.level}!`);
       }
     }
 
@@ -1131,12 +1261,11 @@
         sound.fanfare();
         showReaction("⚡ EVOLVED! ⚡", 2500);
         notifier.send('evolve', 'Jimothy Mutated! ⚡', `God help us all, he's now a ${title}...`, 0);
-        notifyChat(`⚡ *EVOLUTION!* Jimothy has mutated into a **${title}**!`);
       }
       
       let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
       elements.rankBadge.textContent = `LVL ${pet.level} ${title}`;
-      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`; 
+      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`;
     }
 
     let isMenuOpen = false;
@@ -1243,7 +1372,7 @@
 
     function executeMenuOption() {
       const opt = MENU_OPTIONS[menuIndex];
-      toggleMenu(); 
+      toggleMenu();
       
       if (opt.includes("NAP")) {
         toggleNap();
@@ -1255,7 +1384,9 @@
         initHeistGame();
       } else if (opt.includes("RESET")) {
         localStorage.removeItem(STATE_KEY); 
+        
         pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [], inMiniGame: false, inHeistGame: false };
+        
         if (pet.inMiniGame || pet.inHeistGame) {
           clearInterval(miniGameInterval);
           if (typeof heistInterval !== 'undefined') clearInterval(heistInterval);
@@ -1264,6 +1395,7 @@
           pet.inMiniGame = false;
           pet.inHeistGame = false;
         }
+        
         elements.graphic.classList.add('idle-anim');
         elements.eyes.style.display = 'block';
         elements.sleepZzz.style.display = 'none';
@@ -1278,7 +1410,7 @@
         setLog("A fresh Jimothy crawled out of the recycling bin.");
         updateHUD();
       } else if (opt.includes("AI FORAGE")) {
-         generateAIFood();
+         triggerRandomAntics();
       }
     }
 
@@ -1301,14 +1433,18 @@
 
       elements.chaosBar.style.width = `${pet.chaos}%`;
       elements.chaos.textContent = `${Math.round(pet.chaos)}%`;
+
       elements.greaseBar.style.width = `${pet.grease}%`;
       elements.grease.textContent = `${Math.round(pet.grease)}%`;
+
       elements.energyBar.style.width = `${pet.energy}%`;
       elements.energy.textContent = `${Math.round(pet.energy)}%`;
+
       elements.capsVal.textContent = pet.shinyCaps;
 
       checkEvolution();
       updateClockDisplay();
+      
       saveState();
     }
 
@@ -1328,6 +1464,7 @@
 
       const celestialBody = document.getElementById('celestialBody');
       const streetLightBeam = document.getElementById('streetLightBeam');
+      
       let f; 
       
       if (isDay) {
@@ -1379,7 +1516,6 @@
       
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
       sound.thud();
-      haptic([40, 50, 40]);
       elements.graphic.classList.remove('idle-anim');
       elements.graphic.style.transform = 'scale(1.5) translateY(10px)';
       
@@ -1499,7 +1635,7 @@
           }
           setTimeout(() => clearIdleAnims(), 6000);
         } else {
-          gainXp(3); 
+          gainXp(3);
           let didBuild = false;
           let didRearrange = false;
 
@@ -1530,12 +1666,16 @@
                   elements.graphic.classList.remove('idle-anim');
                   elements.graphic.classList.add('scurry-anim');
                   sound.scuttle();
+                  
                   setTimeout(() => {
                       elements.graphic.classList.remove('scurry-anim');
-                      if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) elements.graphic.classList.add('idle-anim');
+                      if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) {
+                          elements.graphic.classList.add('idle-anim');
+                      }
                   }, didRearrange ? 2500 : 1200); 
               }
           }
+          
           drawTrashPalace();
         }
       }
@@ -1545,6 +1685,7 @@
     function toggleNap() {
       if (pet.inMiniGame) return;
       pet.isSleeping = !pet.isSleeping;
+      
       const dreamBubble = document.getElementById('dreamBubble');
       
       if (pet.isSleeping) {
@@ -1631,16 +1772,14 @@
       if (btn === 'A') {
         if (dogWaking >= 3) {
           sound.hiss();
-          haptic([40, 50, 40]);
           dogWaking += 2; 
           renderGameScreen();
         } else {
           sound.munch();
-          haptic(30);
           cansTipped++;
           dogWaking = Math.min(3, dogWaking + 1);
           
-          if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++; 
+          if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++;
           
           if (Math.random() > 0.8) {
              const itemKeys = Object.keys(ITEM_DB);
@@ -1658,11 +1797,9 @@
       } else if (btn === 'B') {
         if (pet.hunger > 100 && Math.random() < 0.3) {
            sound.thud();
-           haptic([40, 50, 40]);
            showReaction("Too fat to hide!"); 
         } else {
            sound.scuttle();
-           haptic(20);
            dogWaking = Math.max(0, dogWaking - 1); 
         }
         renderGameScreen();
@@ -1678,10 +1815,9 @@
 
       if (won) {
         sound.fanfare();
-        haptic([100, 50, 100, 50, 200]);
         let loot = cansTipped * 15;
         pet.trashCollected = (pet.trashCollected || 0) + loot;
-        pet.hunger = Math.min(150, pet.hunger + (cansTipped * 8)); 
+        pet.hunger = Math.min(100, pet.hunger + (cansTipped * 8)); 
         pet.raidFrenzy = 6; 
         pet.chaos += 10;
         pet.grease += 5;
@@ -1689,7 +1825,6 @@
         showReaction(`👑 +${loot} TRASH!`);
         message = `Looted ${cansTipped} bins & triggered a BUILD FRENZY!`;
       } else {
-        haptic([40, 50, 40]);
         document.getElementById('jimothyGraphic').classList.remove('idle-anim');
         document.getElementById('jimothyGraphic').classList.add('shake-anim');
         setTimeout(() => { 
@@ -1730,8 +1865,11 @@
       heistInterval = setInterval(() => {
         heistTimerVal--;
         document.getElementById('gameTimer').textContent = `TIME: ${heistTimerVal}s`;
+        
         if (Math.random() > 0.3) suspicion += 10;
+        
         renderHeistScreen();
+
         if (suspicion >= 100) {
           endHeistGame(false, "🔦 BUSTED! The homeowner caught you!");
         } else if (heistTimerVal <= 0) {
@@ -1770,12 +1908,10 @@
       if (btn === 'A') {
         if (suspicion >= 85) {
           sound.hiss();
-          haptic([40, 50, 40]);
-          suspicion += 20;
+          suspicion += 20; 
           renderHeistScreen();
         } else {
           sound.munch();
-          haptic(30);
           heistLoot++;
           suspicion += 15 + Math.floor(Math.random() * 10);
           
@@ -1793,7 +1929,6 @@
         }
       } else if (btn === 'B') {
         sound.scuttle();
-        haptic(20);
         suspicion = Math.max(0, suspicion - 30); 
         showReaction("Frozen...");
         renderHeistScreen();
@@ -1809,7 +1944,6 @@
 
       if (won) {
         sound.fanfare();
-        haptic([100, 50, 100, 50, 200]);
         let lootTrash = heistLoot * 10;
         pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
         pet.hunger = Math.min(150, pet.hunger + (heistLoot * 5)); 
@@ -1818,7 +1952,6 @@
         gainXp(100 + (heistLoot * 15)); 
         showReaction(`👑 HEIST SUCCESS!`);
       } else {
-        haptic([40, 50, 40]);
         document.getElementById('jimothyGraphic').classList.remove('idle-anim');
         document.getElementById('jimothyGraphic').classList.add('shake-anim');
         setTimeout(() => { 
@@ -1826,6 +1959,7 @@
             if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim');
         }, 700);
         showReaction("🚨 BUSTED!");
+        
         pet.hunger = Math.max(0, pet.hunger - 20);
         
         let availableItems = Object.keys(pet.inventory || {}).filter(k => pet.inventory[k] > 0);
@@ -1906,14 +2040,12 @@
     }
 
     btnMenu.addEventListener('click', () => {
-      haptic(15);
       clearIdleAnims();
       if (isInventoryOpen) toggleInventory();
       else toggleMenu();
     });
 
     btnA.addEventListener('click', () => {
-      haptic(15);
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('A'); return; }
@@ -1953,7 +2085,6 @@
         setTimeout(() => { elements.graphic.classList.remove('shake-anim'); elements.graphic.classList.add('idle-anim'); }, 700);
         showReaction("🤮 GROSS!");
         sound.hiss();
-        haptic([40, 50, 40]);
         gainXp(5);
       } else {
         if (food.hunger > 30) sound.trill(); 
@@ -1967,7 +2098,6 @@
     });
 
     btnB.addEventListener('click', () => {
-      haptic(15);
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('B'); return; }
@@ -1991,7 +2121,6 @@
     });
 
     btnSelect.addEventListener('click', () => { 
-      haptic(15);
       clearIdleAnims();
       sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
@@ -2000,7 +2129,6 @@
     });
     
     btnStart.addEventListener('click', () => {
-      haptic(15);
       clearIdleAnims();
       sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
@@ -2031,7 +2159,6 @@
        if (ev.sfx === 'hiss') {
            elements.graphic.classList.remove('idle-anim');
            elements.graphic.classList.add('shake-anim');
-           haptic([40, 50, 40]);
            setTimeout(() => { elements.graphic.classList.remove('shake-anim'); if(!pet.isSleeping) elements.graphic.classList.add('idle-anim'); }, 700);
        }
        
@@ -2068,23 +2195,38 @@
     });
 
     document.getElementById('deviceToggleBtn').addEventListener('click', () => {
-      haptic(15); sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000);
+      sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000);
     });
     document.getElementById('colorToggleBtn').addEventListener('click', () => {
-      haptic(15); sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000);
+      sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000);
     });
     document.getElementById('lcdToggleBtn').addEventListener('click', () => {
-      haptic(15); sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000);
+      sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000);
     });
     
     document.getElementById('notifToggleBtn').addEventListener('click', async (e) => {
-      haptic(15);
       sound.beep();
       const isEnabled = await notifier.toggle();
       e.target.textContent = isEnabled ? '🔔' : '🔕';
       showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500);
     });
 
+    document.getElementById('hapticToggleBtn').addEventListener('click', (e) => {
+      sound.beep();
+      prefs.hapticsEnabled = !prefs.hapticsEnabled;
+      e.target.textContent = prefs.hapticsEnabled ? '📳' : '📴';
+      applyPrefs();
+      showReaction(prefs.hapticsEnabled ? "📳 Haptics ON" : "📴 Haptics OFF", 1500);
+      if (prefs.hapticsEnabled) haptic([30, 30, 30]);
+    });
+
+    document.getElementById('soundToggleBtn').addEventListener('click', (e) => {
+      const isMuted = sound.toggleMute();
+      e.target.textContent = isMuted ? '🔇' : '🔊';
+      if (!isMuted) sound.beep();
+    });
+
+    // Keyboard bindings
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
       if (e.key === 'ArrowUp') document.getElementById('dpadUp').click();
@@ -2095,7 +2237,6 @@
       if (e.key.toLowerCase() === 'b' || e.key === '2') btnB.click();
     });
 
-    // Boot up
     loadPrefs();
     loadState();
     updateHUD();
@@ -2112,6 +2253,8 @@
        cycleDreams();
        dreamInterval = setInterval(cycleDreams, 3500);
        setLog("Jimothy is fast asleep.");
+    } else {
+       setLog("Jimothy emerged from the recycling bin.");
     }
   </script>
 </body>
