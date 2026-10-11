@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Jima-Gotchi: Pocket-sized Raccoon Virtual "Pet Terrorist"</title>
+  
   <!-- Raccoon Favicon -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦝</text></svg>">
   <!-- Tailwind CSS CDN -->
@@ -35,7 +36,7 @@
       --shell-bg-2: #1e4a38;
       --shell-bg-3: #122c22;
       --shell-border: #0f251c;
-      --shell-radius: 12px 12px 40px 40px; /* Gameboy Shape by default now */
+      --shell-radius: 12px 12px 40px 40px;
       --shell-bezel: #1b251e;
       --shell-bezel-border: #0b1712;
       --brand-text: #6ee7b7;
@@ -48,7 +49,7 @@
       -webkit-user-select: none;
       touch-action: manipulation;
       margin: 0;
-      /* Notice: overflow: hidden is REMOVED from here to allow normal scrolling */
+      /* Scroll lock removed from root body to allow natural mobile scrolling */
     }
 
     /* Important: Hide the main UI and lock scrolling ONLY when in AR mode */
@@ -62,14 +63,9 @@
     
     /* Style the AR Button injected by Three.js */
     #ARButton {
-      z-index: 9999; /* Ensure it's above everything */
-      background-color: var(--brand-text) !important;
-      color: var(--shell-bg-3) !important;
-      font-family: 'Press Start 2P', monospace !important;
-      font-size: 10px !important;
-      border: 2px solid var(--shell-bg-3) !important;
-      border-radius: 8px !important;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.5) !important;
+      position: absolute !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
     }
 
     .lcd-screen {
@@ -99,7 +95,6 @@
       transition: border-radius 0.4s ease, background 0.4s ease, border-color 0.4s ease;
     }
 
-    /* Pixel Art Animations */
     @keyframes raccoonIdle {
       0%, 100% { transform: translateY(0px) scale(1); }
       50% { transform: translateY(-4px) scale(1.02); }
@@ -159,7 +154,6 @@
     }
     .award-pop { animation: awardPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
 
-    /* Environment Animations */
     @keyframes cloudPan {
       from { transform: translateX(-40px); }
       to { transform: translateX(140px); }
@@ -195,13 +189,14 @@
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 select-none text-slate-100 overflow-x-hidden">
 
-  <!-- Container for the Three.js AR View (Hidden by default, used when AR is active) -->
+  <!-- Container for the Three.js AR View -->
+  <!-- pointer-events-none ensures this invisible layer doesn't block mobile scrolling! -->
   <div id="ar-container" class="absolute inset-0 z-0 pointer-events-none"></div>
 
   <!-- The main UI wrapped in a container so we can hide it during AR -->
   <div class="relative w-full h-[95vh] min-h-[650px] max-w-[600px] flex flex-col items-center toy-shell-container z-10">
     
-    <!-- Handheld Body Container (Dynamically scaled via flex) -->
+    <!-- Handheld Body Container -->
     <div class="toy-shell w-full h-full p-4 sm:p-6 relative z-10 flex flex-col items-center justify-between">
       
       <!-- Top Brand Header -->
@@ -230,14 +225,13 @@
 
       <div class="w-full flex-1 flex flex-col min-h-[200px] p-2 sm:p-4 rounded-2xl shadow-inner border-4 shrink-0" style="background-color: var(--shell-bezel); border-color: var(--shell-bezel-border);">
         
-        <!-- Gameboy Top Bezel Text -->
         <div class="w-full flex justify-center mb-1 shrink-0">
             <span class="text-[8px] font-sans tracking-[0.2em] opacity-70" style="color: var(--shell-bg-3);">DOT MATRIX WITH STEREO SOUND</span>
         </div>
 
         <div id="lcdScreen" class="lcd-screen w-full flex-1 rounded-lg p-2.5 flex flex-col justify-between overflow-hidden" style="color: var(--lcd-pixel);">
           
-          <!-- Screen Splat & Crack Overlays -->
+          <!-- Screen Overlays -->
           <div id="screenSplat" class="absolute inset-0 z-30 hidden items-center justify-center pointer-events-none">
             <div id="splatGraphic" class="text-5xl sm:text-7xl drop-shadow-lg transition-all duration-1000 origin-center">🍅</div>
           </div>
@@ -249,7 +243,6 @@
              </svg>
           </div>
 
-          <!-- Level Up Award Overlay -->
           <div id="awardScreen" class="absolute inset-0 z-50 hidden flex-col items-center justify-center p-2">
             <div class="absolute inset-0 opacity-90" style="background-color: var(--lcd-bg);"></div>
             <div class="award-pop relative z-10 flex flex-col items-center justify-center border-[3px] p-4 shadow-xl w-[90%] text-center" style="background-color: var(--lcd-bg); border-color: var(--lcd-pixel);">
@@ -259,32 +252,25 @@
             </div>
           </div>
 
-          <!-- On-Screen Interactive Menu -->
           <div id="menuScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
             <div class="flex justify-between items-center text-[9px] sm:text-[10px] font-bold border-b pb-1 mb-1" style="border-color: var(--lcd-ui);">
               <span>MAIN MENU</span>
               <span class="animate-pulse opacity-70">▼/▲</span>
             </div>
-            <div id="menuList" class="flex flex-col space-y-1 text-[8px] sm:text-[9px] font-mono mt-1">
-              <!-- JS populated -->
-            </div>
+            <div id="menuList" class="flex flex-col space-y-1 text-[8px] sm:text-[9px] font-mono mt-1"></div>
           </div>
 
-          <!-- Inventory Overlay -->
           <div id="inventoryScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
             <div class="flex justify-between items-center text-[9px] sm:text-[10px] font-bold border-b pb-1 mb-1 shrink-0" style="border-color: var(--lcd-ui);">
               <span>INVENTORY</span>
               <span class="animate-pulse opacity-70">B:EXIT</span>
             </div>
-            <div id="inventoryGrid" class="grid grid-cols-4 gap-1.5 flex-1 content-start overflow-y-auto">
-              <!-- Populated via JS -->
-            </div>
+            <div id="inventoryGrid" class="grid grid-cols-4 gap-1.5 flex-1 content-start overflow-y-auto"></div>
             <div id="inventoryDesc" class="h-8 mt-1 text-[7px] sm:text-[8px] font-mono border-t pt-1 shrink-0 leading-tight" style="border-color: var(--lcd-ui);">
               BAG IS EMPTY
             </div>
           </div>
 
-          <!-- Top Status Icons -->
           <div class="flex justify-between items-center text-[8px] sm:text-[9px] border-b pb-1 font-mono" style="border-color: var(--lcd-ui);">
             <span id="rankBadge" class="font-bold truncate max-w-[170px]">KIT BANDIT (AGE 1)</span>
             <div class="flex items-center space-x-1.5">
@@ -293,7 +279,6 @@
             </div>
           </div>
 
-          <!-- Meters Grid (Compact Pixel Indicators) -->
           <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-[8px] sm:text-[9px] my-1 border-b pb-1 shrink-0 font-mono" style="border-color: var(--lcd-ui);">
             <div>
               <div class="flex justify-between"><span>TRASH:</span><span id="hungerNum">80%</span></div>
@@ -313,23 +298,16 @@
             </div>
           </div>
 
-          <!-- Main Stage: Jimothy Pixel Character Canvas / Sprite -->
           <div id="stageArea" class="relative flex-1 flex flex-col items-center justify-center min-h-[110px] overflow-hidden">
-
-            <!-- Static LCD Printed Background -->
             <svg id="stageBackground" class="absolute inset-0 w-full h-full pixelated z-0" viewBox="0 0 120 70" preserveAspectRatio="none">
               <g style="fill: var(--lcd-pixel); stroke: var(--lcd-pixel);" opacity="0.18">
-                <!-- Left side: Brick Building -->
+                <!-- Brick Building -->
                 <rect x="0" y="0" width="35" height="70" style="fill: var(--lcd-pixel);" opacity="0.1" stroke="none" />
                 <line x1="35" y1="0" x2="35" y2="70" stroke-width="1.5" />
-                
-                <!-- Window -->
                 <rect x="6" y="10" width="20" height="26" fill="none" stroke-width="1.5" />
                 <line x1="6" y1="23" x2="26" y2="23" stroke-width="1" />
                 <line x1="16" y1="10" x2="16" y2="36" stroke-width="1" />
                 <rect x="4" y="36" width="24" height="2" stroke="none" />
-                
-                <!-- Brick patterns -->
                 <line x1="0" y1="46" x2="12" y2="46" stroke-width="1" />
                 <line x1="12" y1="46" x2="12" y2="52" stroke-width="1" />
                 <line x1="20" y1="52" x2="35" y2="52" stroke-width="1" />
@@ -345,7 +323,7 @@
                 <line x1="70" y1="45" x2="120" y2="45" stroke-width="1.5" />
                 <line x1="70" y1="58" x2="120" y2="58" stroke-width="1.5" />
 
-                <!-- Dynamic Sky Elements: Clouds, Stars, Sun/Moon -->
+                <!-- Clouds & Sky -->
                 <g class="cloud-anim-1" style="fill: var(--lcd-pixel); opacity: 0.15;">
                   <rect x="0" y="8" width="15" height="4" rx="2" />
                   <circle cx="5" cy="7" r="3" />
@@ -357,7 +335,6 @@
                   <circle cx="-18" cy="13" r="4" />
                   <circle cx="-13" cy="15" r="2" />
                 </g>
-
                 <g id="starGroup" style="display: none; fill: var(--lcd-pixel);">
                    <circle cx="25" cy="10" r="0.5" class="twinkle-anim" style="animation-delay: 0s;" />
                    <circle cx="55" cy="6" r="0.5" class="twinkle-anim" style="animation-delay: 1.5s;" />
@@ -365,23 +342,17 @@
                    <circle cx="110" cy="5" r="0.5" class="twinkle-anim" style="animation-delay: 2s;" />
                 </g>
 
-                <!-- Celestial Body (Moves dynamically via JS) -->
                 <g id="celestialBody" transform="translate(100, 15)"></g>
 
-                <!-- Powerlines -->
+                <!-- Environment -->
                 <path d="M 35,5 Q 75,20 120,0" fill="none" stroke-width="0.75" />
                 <path d="M 35,15 Q 75,30 120,10" fill="none" stroke-width="0.75" />
-
-                <!-- Street Lamp -->
                 <line x1="72" y1="45" x2="72" y2="25" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
                 <path d="M 72,25 Q 75,20 80,22" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
                 <polygon points="78,21 82,23 83,25 77,25" fill="var(--lcd-pixel)"/>
-                <!-- The light beam (Night only) -->
                 <g id="streetLightBeam" class="flicker-anim" style="fill: var(--lcd-pixel); opacity: 0.1;">
                   <polygon points="80,25 65,45 95,45" />
                 </g>
-
-                <!-- Distant Dumpster -->
                 <path d="M 42,45 L 68,45 L 68,65 L 42,65 Z" fill="none" stroke-width="1" />
                 <line x1="40" y1="45" x2="70" y2="45" stroke-width="1.5" />
                 <line x1="0" y1="65" x2="120" y2="65" stroke-width="1" />
@@ -390,69 +361,55 @@
               <g id="trashPalaceGroup"></g>
             </svg>
 
-            <!-- Reaction Bubble -->
+            <!-- Bubbles -->
             <div id="speechBubble" class="absolute top-0 px-2 py-0.5 text-[8px] sm:text-[10px] rounded border opacity-0 transition-opacity duration-200 z-20 max-w-[200px] text-center" style="background-color: var(--lcd-pixel); color: var(--lcd-bg); border-color: var(--lcd-pixel);">
               *SCUTTLE*
             </div>
-
-            <!-- Dream Bubble -->
             <div id="dreamBubble" class="absolute top-1 right-2 hidden flex-col items-center justify-center p-1 border rounded z-20 shadow-sm" style="background-color: var(--lcd-bg); border-color: var(--lcd-pixel);">
               <span id="dreamIcon" class="text-sm sm:text-base pixelated">💭</span>
             </div>
 
-            <!-- Jimothy Vector Graphic (Dynamically scaled) -->
             <div id="jimothyGraphic" class="relative z-10 idle-anim cursor-pointer transition-transform duration-200 h-[45%] min-h-[70px] max-h-[160px] flex items-end">
               <svg id="jimothySvg" class="h-full w-auto pixelated" viewBox="0 0 100 90" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Tail -->
                 <path d="M 68 62 C 82 62, 94 56, 92 42 C 90 34, 80 34, 76 40 C 74 46, 75 52, 68 56 Z" style="fill: var(--lcd-pixel);" />
                 <path d="M 77 45 C 80 43, 85 45, 85 49" style="stroke: var(--lcd-bg);" stroke-width="3" stroke-linecap="round" />
                 <path d="M 72 52 C 78 50, 83 54, 83 57" style="stroke: var(--lcd-bg);" stroke-width="3" stroke-linecap="round" />
-                <!-- Body -->
                 <ellipse cx="50" cy="56" rx="22" ry="18" style="fill: var(--lcd-pixel);" />
                 <ellipse cx="49" cy="58" rx="14" ry="11" style="fill: var(--lcd-ghost);" />
-                <!-- Ears -->
                 <polygon points="34,26 42,12 48,27" style="fill: var(--lcd-pixel);" />
                 <polygon points="37,24 42,16 46,25" style="fill: var(--lcd-ghost);" />
                 <polygon points="66,26 58,12 52,27" style="fill: var(--lcd-pixel);" />
                 <polygon points="63,24 58,16 54,25" style="fill: var(--lcd-ghost);" />
-                <!-- Head & Mask -->
                 <ellipse cx="50" cy="35" rx="21" ry="15" style="fill: var(--lcd-pixel);" />
                 <ellipse cx="50" cy="36" rx="18" ry="8" style="fill: var(--lcd-ghost);" />
                 <ellipse cx="41" cy="35" rx="6" ry="5" style="fill: var(--lcd-pixel);" />
                 <ellipse cx="59" cy="35" rx="6" ry="5" style="fill: var(--lcd-pixel);" />
-                <!-- Eyes -->
                 <g id="jimothyEyes">
                   <circle cx="41" cy="34" r="2.2" style="fill: var(--lcd-bg);" />
                   <circle cx="42" cy="34" r="1.1" style="fill: var(--lcd-pixel);" />
                   <circle cx="59" cy="34" r="2.2" style="fill: var(--lcd-bg);" />
                   <circle cx="58" cy="34" r="1.1" style="fill: var(--lcd-pixel);" />
                 </g>
-                <!-- Zzz for sleeping (Hidden by default) -->
                 <g id="sleepZzz" style="display: none;">
                   <text x="65" y="20" font-family="monospace" font-size="12" style="fill: var(--lcd-pixel); animation: raccoonIdle 2s infinite;">Z</text>
                   <text x="75" y="10" font-family="monospace" font-size="16" style="fill: var(--lcd-pixel); animation: raccoonIdle 2.5s infinite;">z</text>
                 </g>
-                <!-- Snout -->
                 <ellipse cx="50" cy="41" rx="5" ry="3.5" style="fill: var(--lcd-bg);" />
                 <polygon points="48,40 52,40 50,42" style="fill: var(--lcd-pixel);" />
                 <line x1="33" y1="39" x2="25" y2="38" style="stroke: var(--lcd-pixel);" stroke-width="1.5" />
                 <line x1="67" y1="39" x2="75" y2="38" style="stroke: var(--lcd-pixel);" stroke-width="1.5" />
-                <!-- Paws -->
                 <ellipse cx="38" cy="56" rx="4" ry="3" style="fill: var(--lcd-pixel);" />
                 <ellipse cx="62" cy="56" rx="4" ry="3" style="fill: var(--lcd-pixel);" />
                 <ellipse cx="38" cy="73" rx="5" ry="3.5" style="fill: var(--lcd-pixel);" />
                 <ellipse cx="62" cy="73" rx="5" ry="3.5" style="fill: var(--lcd-pixel);" />
-                <!-- Crown -->
                 <g id="crownSlot" style="display: none;">
                   <polygon points="42,16 46,21 50,14 54,21 58,16 57,25 43,25" style="fill: var(--lcd-pixel);" />
                 </g>
-                <!-- Juggling Balls (Hidden) -->
                 <g id="juggleProps" style="display: none;">
                    <circle cx="35" cy="20" r="4" style="fill: var(--lcd-pixel);" class="juggle-anim-1"/>
                    <circle cx="50" cy="15" r="4" style="fill: var(--lcd-ghost);" class="juggle-anim-2"/>
                    <circle cx="65" cy="20" r="4" style="fill: var(--lcd-pixel);" class="juggle-anim-3"/>
                 </g>
-                <!-- Spinning Plates (Hidden) -->
                 <g id="plateProps" style="display: none;">
                    <line x1="38" y1="56" x2="25" y2="25" stroke="var(--lcd-pixel)" stroke-width="1.5"/>
                    <ellipse cx="25" cy="25" rx="10" ry="2" style="fill: var(--lcd-pixel); animation: plateWobble 0.3s infinite;"/>
@@ -462,14 +419,13 @@
               </svg>
             </div>
 
-            <!-- Ground Props -->
             <div id="groundProps" class="relative z-10 w-full flex justify-between items-end px-3 text-xs -mt-1 font-mono">
               <span id="trashPropLeft">🥫</span>
               <span id="shinyCountLabel" class="text-[7px] font-bold">✨ CAPS: <span id="capsVal">3</span></span>
               <span id="trashPropRight">🗑️</span>
             </div>
 
-            <!-- Mini-Game Overlay -->
+            <!-- Mini Game Container -->
             <div id="miniGameScreen" class="absolute inset-0 p-2 flex flex-col justify-between hidden z-20" style="background-color: var(--lcd-bg);">
               <div class="flex justify-between items-center text-[7px] font-bold border-b pb-1" style="border-color: var(--lcd-ui);">
                 <span id="gameTitle">MIDNIGHT RAID</span>
@@ -480,7 +436,6 @@
             </div>
           </div>
 
-          <!-- Action Log -->
           <div id="bottomConsole" class="border-t pt-1 flex justify-between items-center text-[9px] sm:text-[11px] shrink-0" style="border-color: var(--lcd-ui);">
             <p id="actionLog" class="truncate font-mono tracking-tight font-bold">JIMOTHY is sniffing the rug...</p>
             <span id="activityDot" class="w-1.5 h-1.5 rounded-full animate-ping shrink-0 ml-2" style="background-color: var(--lcd-pixel);"></span>
@@ -488,56 +443,40 @@
         </div>
       </div>
 
-      <!-- Utilities Row (Menu Button) -->
       <div class="w-full mt-3 flex justify-center px-4 text-[8px] sm:text-[10px] font-bold shrink-0">
         <button id="btnMenu" class="text-slate-200 bg-slate-800 px-6 py-1.5 rounded-full border border-slate-600 active:bg-slate-700 active:scale-95 transition-all shadow-[inset_0_-2px_4px_rgba(0,0,0,0.5)] tracking-widest">≡ MENU</button>
       </div>
 
-      <!-- Gameboy Controls Area -->
       <div class="w-full mt-6 mb-2 flex items-center justify-between px-2 sm:px-6 relative shrink-0">
-        
-        <!-- Classic D-Pad (Percentage based for perfect scaling) -->
         <div class="relative w-[100px] h-[100px] sm:w-[130px] sm:h-[130px] md:w-[150px] md:h-[150px]">
-          <!-- Visual Cross -->
           <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <!-- Vertical -->
             <div class="w-[33%] h-full bg-gray-800 rounded-sm shadow-[inset_-2px_-2px_4px_rgba(0,0,0,0.5),inset_2px_2px_4px_rgba(255,255,255,0.1)] border border-gray-900"></div>
-            <!-- Horizontal -->
             <div class="absolute w-full h-[33%] bg-gray-800 rounded-sm shadow-[inset_-2px_-2px_4px_rgba(0,0,0,0.5),inset_2px_2px_4px_rgba(255,255,255,0.1)] border border-gray-900"></div>
-            <!-- Center Pivot -->
             <div class="absolute w-[25%] h-[25%] bg-gray-700 rounded-full shadow-inner opacity-40"></div>
           </div>
-          <!-- Invisible Interactive Hitboxes -->
           <button id="dpadUp" class="absolute top-0 left-1/2 -translate-x-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-t-sm cursor-pointer"></button>
           <button id="dpadDown" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-b-sm cursor-pointer"></button>
           <button id="dpadLeft" class="absolute left-0 top-1/2 -translate-y-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-l-sm cursor-pointer"></button>
           <button id="dpadRight" class="absolute right-0 top-1/2 -translate-y-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-r-sm cursor-pointer"></button>
         </div>
 
-        <!-- A and B Action Buttons -->
         <div class="flex space-x-4 sm:space-x-6 rotate-[-15deg] mt-8 sm:mt-12 mr-2">
-          <!-- Button B -->
           <div class="flex flex-col items-center">
             <button id="btnB" class="w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-full bg-rose-600 border-b-4 border-rose-900 active:border-b-0 active:translate-y-1 active:bg-rose-700 flex items-center justify-center text-rose-200 font-extrabold text-xl sm:text-2xl shadow-[0_5px_10px_rgba(0,0,0,0.5)] transition-all">B</button>
             <span class="text-[10px] sm:text-[11px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">RAID</span>
           </div>
-          <!-- Button A -->
           <div class="flex flex-col items-center -mt-8 sm:-mt-10">
             <button id="btnA" class="w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-full bg-rose-600 border-b-4 border-rose-900 active:border-b-0 active:translate-y-1 active:bg-rose-700 flex items-center justify-center text-rose-200 font-extrabold text-xl sm:text-2xl shadow-[0_5px_10px_rgba(0,0,0,0.5)] transition-all">A</button>
             <span class="text-[10px] sm:text-[11px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">FEED</span>
           </div>
         </div>
-
       </div>
 
-      <!-- Select & Start Buttons -->
       <div class="w-full mt-6 sm:mt-8 mb-4 flex justify-center space-x-6 shrink-0">
-        <!-- Select (Map to NAP) -->
         <div class="flex flex-col items-center rotate-[-15deg]">
           <button id="btnSelect" class="w-16 h-4 sm:w-20 sm:h-5 md:w-24 md:h-6 bg-gray-800 rounded-full shadow-inner border-t border-gray-600 active:bg-gray-900 active:scale-95 transition-transform"></button>
           <span class="text-[9px] sm:text-[10px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">NAP</span>
         </div>
-        <!-- Start (Map to LINT) -->
         <div class="flex flex-col items-center rotate-[-15deg]">
           <button id="btnStart" class="w-16 h-4 sm:w-20 sm:h-5 md:w-24 md:h-6 bg-gray-800 rounded-full shadow-inner border-t border-gray-600 active:bg-gray-900 active:scale-95 transition-transform"></button>
           <span class="text-[9px] sm:text-[10px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">LINT</span>
@@ -548,22 +487,40 @@
   </div>
 
   <script type="module">
-    // --- THREE.JS AR SETUP ---
     import * as THREE from 'three';
     import { ARButton } from 'three/addons/webxr/ARButton.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    // AR 3D MODEL CONFIGURATION
-    // Paste the URL to your .gltf or .glb file here. 
-    // If left empty, a procedural 3D blocky raccoon will be generated for testing.
     const AR_MODEL_URL = ""; 
 
     let arCamera, arScene, arRenderer, arModel;
     let isARMode = false;
+    
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+    let reticle;
+    let arController;
+    let jimothyPlaced = false;
+    
+    // NEW: Object Permanence variables
+    let arPalaceGroup; 
+    const trashPieces = [];
+    
+    // Store geometries and materials globally so we can save/load their indexes easily
+    const trashGeometries = [
+        new THREE.BoxGeometry(0.1, 0.1, 0.1), // Cardboard box
+        new THREE.CylinderGeometry(0.04, 0.04, 0.12, 16), // Soup can
+        new THREE.BoxGeometry(0.15, 0.05, 0.1) // Pizza box
+    ];
+    const trashMaterials = [
+        new THREE.MeshStandardMaterial({ color: 0x8b5a2b }), // Brown
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 }), // Silver
+        new THREE.MeshStandardMaterial({ color: 0xee0000 }), // Red
+        new THREE.MeshStandardMaterial({ color: 0x228b22 })  // Green
+    ];
 
     function initAR() {
       const arContainer = document.getElementById('ar-container');
-      
       arScene = new THREE.Scene();
       
       arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -580,40 +537,62 @@
       arRenderer.setPixelRatio(window.devicePixelRatio);
       arRenderer.setSize(window.innerWidth, window.innerHeight);
       arRenderer.xr.enabled = true;
-      
       arContainer.appendChild(arRenderer.domElement);
 
-      // Create and append the AR Button
       const arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
       document.body.appendChild(arBtn);
+
+      arController = arRenderer.xr.getController(0);
+      arController.addEventListener('select', onSelect);
+      arScene.add(arController);
+
+      reticle = new THREE.Mesh(
+          new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ color: 0x6ee7b7 })
+      );
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      arScene.add(reticle);
+
+      // Create master group for object permanence 
+      arPalaceGroup = new THREE.Group();
+      arPalaceGroup.visible = false;
+      arScene.add(arPalaceGroup);
       
-      // Listen for AR session start/end to toggle UI visibility and CSS classes
       arRenderer.xr.addEventListener('sessionstart', () => {
           isARMode = true;
-          document.body.classList.add('ar-active'); // Triggers the correct overflow lock
+          document.body.classList.add('ar-active');
+          hitTestSourceRequested = false;
+          hitTestSource = null;
+          jimothyPlaced = false;
+          
+          arPalaceGroup.visible = false;
+          // Clear current local pieces from memory, they'll be reloaded on placement
+          trashPieces.forEach(p => arPalaceGroup.remove(p));
+          trashPieces.length = 0;
+          if (arModel) arModel.visible = false;
       });
+      
       arRenderer.xr.addEventListener('sessionend', () => {
           isARMode = false;
-          document.body.classList.remove('ar-active'); // Restores normal scrolling
+          document.body.classList.remove('ar-active');
+          reticle.visible = false;
+          arPalaceGroup.visible = false;
       });
 
       if (AR_MODEL_URL) {
-         // Load external glTF/glb
          const loader = new GLTFLoader();
          loader.load(
             AR_MODEL_URL,
             function (gltf) {
                arModel = gltf.scene;
-               // Position it slightly in front of the camera so it's immediately visible
-               arModel.position.set(0, 0, -1);
-               // Adjust scale as necessary. 0.1 is often a good starting point for arbitrary models
                arModel.scale.set(0.1, 0.1, 0.1);
+               arModel.visible = false;
                arScene.add(arModel);
             },
             undefined,
             function (error) {
-               console.error('An error happened loading the 3D model:', error);
-               createProceduralRaccoon(); // Fallback if loading fails
+               createProceduralRaccoon();
             }
          );
       } else {
@@ -624,69 +603,162 @@
       arRenderer.setAnimationLoop(renderAR);
     }
 
+    function saveARPalace() {
+        // Save position/rotation of all trash meshes relative to the arPalaceGroup
+        const data = trashPieces.map(mesh => ({
+            geoIdx: mesh.userData.geoIdx,
+            matIdx: mesh.userData.matIdx,
+            px: mesh.position.x, py: mesh.position.y, pz: mesh.position.z,
+            rx: mesh.rotation.x, ry: mesh.rotation.y, rz: mesh.rotation.z
+        }));
+        localStorage.setItem('jima_ar_palace', JSON.stringify(data));
+    }
+
+    function loadARPalace() {
+        const saved = localStorage.getItem('jima_ar_palace');
+        if (!saved) return;
+        try {
+            const data = JSON.parse(saved);
+            data.forEach(item => {
+                const geo = trashGeometries[item.geoIdx];
+                const mat = trashMaterials[item.matIdx];
+                if (geo && mat) {
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.userData = { geoIdx: item.geoIdx, matIdx: item.matIdx };
+                    mesh.position.set(item.px, item.py, item.pz);
+                    mesh.rotation.set(item.rx, item.ry, item.rz);
+                    arPalaceGroup.add(mesh);
+                    trashPieces.push(mesh);
+                }
+            });
+            setLog(`Loaded ${data.length} saved palace pieces!`);
+        } catch(e) {
+            console.error("Failed to load AR Palace", e);
+        }
+    }
+
+    function onSelect() {
+        if (reticle.visible) {
+            if (!jimothyPlaced && arModel) {
+                // First Tap: Anchor the Palace Group to the real world!
+                arPalaceGroup.position.setFromMatrixPosition(reticle.matrix);
+                
+                // Align to face the user initially
+                const cameraPos = new THREE.Vector3();
+                arCamera.getWorldPosition(cameraPos);
+                cameraPos.y = arPalaceGroup.position.y; 
+                arPalaceGroup.lookAt(cameraPos);
+                
+                // Nest Jimothy inside the palace group
+                arModel.position.set(0, 0, 0); 
+                arModel.rotation.set(0, 0, 0);
+                arPalaceGroup.add(arModel);
+                
+                arPalaceGroup.visible = true;
+                arModel.visible = true;
+                jimothyPlaced = true;
+                
+                haptic([50, 50, 100]);
+                sound.fanfare();
+                setLog("Jimothy placed! Tap to build his palace.");
+                showReaction("MY DOMAIN!");
+                
+                // Reconstruct his saved palace around him!
+                loadARPalace();
+            } else {
+                // Subsequent Taps: Build Trash Castle
+                spawnTrashPiece(reticle.matrix);
+                haptic(30);
+                sound.thud();
+                
+                // Integrate with 2D game state
+                if(typeof pet !== 'undefined') {
+                    pet.trashCollected = (pet.trashCollected || 0) + 10;
+                    pet.chaos += 5;
+                    updateHUD();
+                    if(typeof drawTrashPalace === 'function') drawTrashPalace(); // QA Fix: Update 2D palace immediately
+                }
+                setLog("Jimothy summoned a piece of his Trash Palace!");
+                showReaction("MORE TRASH!");
+            }
+        }
+    }
+
+    function spawnTrashPiece(worldMatrix) {
+        const geoIdx = Math.floor(Math.random() * trashGeometries.length);
+        const matIdx = Math.floor(Math.random() * trashMaterials.length);
+        
+        const mesh = new THREE.Mesh(trashGeometries[geoIdx], trashMaterials[matIdx]);
+        mesh.userData = { geoIdx, matIdx };
+
+        // Position it at the real-world reticle point temporarily
+        mesh.position.setFromMatrixPosition(worldMatrix);
+        
+        // Magically convert world coordinates into the arPalaceGroup's local coordinate system!
+        // This is the secret to object permanence.
+        arPalaceGroup.worldToLocal(mesh.position);
+        
+        // Add random scatter so they look like a pile
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        mesh.rotation.z = (Math.random() - 0.5) * 0.3;
+        mesh.position.y += (Math.random() * 0.1); 
+        mesh.position.x += (Math.random() - 0.5) * 0.15;
+        mesh.position.z += (Math.random() - 0.5) * 0.15;
+
+        // QA Fix: Add slight scale variation for visual flair
+        const scaleMod = 0.8 + (Math.random() * 0.4);
+        mesh.scale.set(scaleMod, scaleMod, scaleMod);
+
+        // Add to our persistent group
+        arPalaceGroup.add(mesh);
+        trashPieces.push(mesh);
+        
+        // Save the new array!
+        saveARPalace();
+    }
+
     function createProceduralRaccoon() {
-      // Procedural Blocky Raccoon as a fallback
       arModel = new THREE.Group();
-      
       const matBody = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
       const matStripe = new THREE.MeshStandardMaterial({ color: 0x111111 });
       const matBelly = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
       
-      // Body
-      const bodyGeo = new THREE.BoxGeometry(0.2, 0.25, 0.2);
-      const body = new THREE.Mesh(bodyGeo, matBody);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.2), matBody);
       body.position.y = 0.125;
       arModel.add(body);
       
-      // Belly
-      const bellyGeo = new THREE.BoxGeometry(0.15, 0.2, 0.02);
-      const belly = new THREE.Mesh(bellyGeo, matBelly);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.02), matBelly);
       belly.position.set(0, 0.1, 0.1);
       arModel.add(belly);
 
-      // Head
-      const headGeo = new THREE.BoxGeometry(0.18, 0.15, 0.18);
-      const head = new THREE.Mesh(headGeo, matBody);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.15, 0.18), matBody);
       head.position.y = 0.32;
       arModel.add(head);
       
-      // Mask
-      const maskGeo = new THREE.BoxGeometry(0.19, 0.06, 0.19);
-      const mask = new THREE.Mesh(maskGeo, matStripe);
+      const mask = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.06, 0.19), matStripe);
       mask.position.y = 0.33;
       arModel.add(mask);
 
-      // Snout
-      const snoutGeo = new THREE.BoxGeometry(0.08, 0.05, 0.08);
-      const snout = new THREE.Mesh(snoutGeo, matBelly);
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.08), matBelly);
       snout.position.set(0, 0.28, 0.1);
       arModel.add(snout);
 
-      // Ears
       const earGeo = new THREE.ConeGeometry(0.04, 0.08, 4);
-      const earL = new THREE.Mesh(earGeo, matBody);
-      earL.position.set(-0.06, 0.42, 0);
-      const earR = new THREE.Mesh(earGeo, matBody);
-      earR.position.set(0.06, 0.42, 0);
-      arModel.add(earL);
-      arModel.add(earR);
+      const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.06, 0.42, 0);
+      const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.06, 0.42, 0);
+      arModel.add(earL); arModel.add(earR);
 
-      // Tail
       const tailGroup = new THREE.Group();
       const tailSeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.08), matBody);
       const tailSeg2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.07), matStripe);
       const tailSeg3 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), matBody);
-      tailSeg2.position.y = 0.09;
-      tailSeg3.position.y = 0.16;
-      tailGroup.add(tailSeg1);
-      tailGroup.add(tailSeg2);
-      tailGroup.add(tailSeg3);
+      tailSeg2.position.y = 0.09; tailSeg3.position.y = 0.16;
+      tailGroup.add(tailSeg1); tailGroup.add(tailSeg2); tailGroup.add(tailSeg3);
       tailGroup.position.set(0, 0.05, -0.1);
       tailGroup.rotation.x = -Math.PI / 4;
       arModel.add(tailGroup);
 
-      // Position in front of camera initially
-      arModel.position.set(0, 0, -1);
+      arModel.visible = false;
       arScene.add(arModel);
     }
 
@@ -700,20 +772,47 @@
 
     function renderAR(timestamp, frame) {
       if (arRenderer && arScene && arCamera) {
-          // Simple idle animation for the 3D model if it exists
-          if (arModel && isARMode) {
-              const time = performance.now() * 0.001;
-              arModel.position.y = Math.sin(time * 2) * 0.02; // Gentle bobbing
-              arModel.rotation.y = Math.sin(time) * 0.1; // Gentle swaying
+          if (frame) {
+              const referenceSpace = arRenderer.xr.getReferenceSpace();
+              const session = arRenderer.xr.getSession();
+
+              if (hitTestSourceRequested === false) {
+                  session.requestReferenceSpace('viewer').then((referenceSpace) => {
+                      session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                          hitTestSource = source;
+                      });
+                  });
+                  session.requestReferenceSpace('local').then((referenceSpace) => {
+                      hitTestSourceRequested = true;
+                  });
+              }
+
+              if (hitTestSource) {
+                  const hitTestResults = frame.getHitTestResults(hitTestSource);
+                  if (hitTestResults.length > 0) {
+                      const hit = hitTestResults[0];
+                      const pose = hit.getPose(referenceSpace);
+                      reticle.visible = true;
+                      reticle.matrix.fromArray(pose.transform.matrix);
+                  } else {
+                      reticle.visible = false;
+                  }
+              }
           }
+
+          if (arModel && isARMode && jimothyPlaced) {
+              const time = performance.now() * 0.001;
+              // Gentle bob relative to his local placement within the group
+              arModel.position.y = 0.015 + Math.sin(time * 2) * 0.015; // QA Fix: Ensure he stays above floor
+              arModel.rotation.z = Math.sin(time) * 0.05; 
+          }
+          
           arRenderer.render(arScene, arCamera);
       }
     }
 
-    // Initialize AR on load
     initAR();
 
-    // Hook up the custom UI button to trigger the hidden WebXR button
     document.getElementById('arToggleBtn').addEventListener('click', () => {
        const webxrButton = document.getElementById('ARButton');
        if(webxrButton) {
@@ -721,12 +820,10 @@
            sound.beep();
            webxrButton.click();
        } else {
-           setLog("AR not supported on this device/browser.");
-           showReaction("AR Failed!");
+           setLog("AR not supported on this device.");
        }
     });
 
-    // --- ORIGINAL GAME LOGIC ---
     class RetroSound {
       constructor() { this.ctx = null; this.muted = false; }
       init() {
@@ -805,25 +902,22 @@
         osc.start(); osc.stop(this.ctx.currentTime + 0.12);
       }
     }
-    window.sound = new RetroSound(); // Make global for UI
+    window.sound = new RetroSound();
 
     class PushNotifier {
       constructor() {
         this.enabled = false;
         this.lastNotifTime = {};
       }
-
       async toggle() {
         if (!("Notification" in window)) {
           setLog("Notifications not supported in this browser.");
           return false;
         }
-
         if (this.enabled) {
           this.enabled = false;
           return false;
         }
-
         if (Notification.permission === "granted") {
           this.enabled = true;
           this.testSend();
@@ -842,41 +936,26 @@
         }
         return false;
       }
-      
       testSend() {
         if(this.enabled) new Notification("Jima-Gotchi", { body: "Notifications enabled! 🦝" });
       }
-
       send(type, title, body, cooldown = 60000) {
         if (!this.enabled || !("Notification" in window) || Notification.permission !== "granted") return;
-        
         const now = Date.now();
         if (now - (this.lastNotifTime[type] || 0) < cooldown) return;
-        
         this.lastNotifTime[type] = now;
-        try {
-          new Notification(title, { body: body });
-        } catch(e) {
-          console.warn("Notification failed", e);
-        }
+        try { new Notification(title, { body: body }); } catch(e) {}
       }
     }
-    window.notifier = new PushNotifier(); // Make global
+    window.notifier = new PushNotifier();
 
-    const SHAPES = [
-      "12px 12px 40px 40px", // Classic Gameboy
-      "45% 45% 50% 50% / 55% 55% 45% 45%", // Egg/Tamagotchi
-      "16px", // Modern Brick
-      "60px" // Pill
-    ];
-
+    const SHAPES = ["12px 12px 40px 40px", "45% 45% 50% 50% / 55% 55% 45% 45%", "16px", "60px"];
     const THEMES = [
       { name: 'Forest', bg1: '#2d6b52', bg2: '#1e4a38', bg3: '#122c22', border: '#0f251c', brand: '#6ee7b7' },
       { name: 'Berry', bg1: '#6b2d5c', bg2: '#4a1e3e', bg3: '#2c1224', border: '#250f1d', brand: '#e76eb4' },
       { name: 'Classic', bg1: '#9ca3af', bg2: '#6b7280', bg3: '#4b5563', border: '#374151', brand: '#1f2937' },
       { name: 'Ocean', bg1: '#2d4a6b', bg2: '#1e324a', bg3: '#121e2c', border: '#0f1825', brand: '#6eabe7' }
     ];
-
     const LCD_STYLES = [
       { name: 'Spinach', bg: '#8ca374', pixel: '#1c2718', ghost: '#7f9568', ui: 'rgba(28, 39, 24, 0.3)' },
       { name: 'Sapphire', bg: '#7493a3', pixel: '#182327', ghost: '#688695', ui: 'rgba(24, 35, 39, 0.3)' },
@@ -900,18 +979,15 @@
       const lcd = LCD_STYLES[prefs.lcdIdx];
 
       root.style.setProperty('--shell-radius', shape);
-      
       root.style.setProperty('--shell-bg-1', theme.bg1);
       root.style.setProperty('--shell-bg-2', theme.bg2);
       root.style.setProperty('--shell-bg-3', theme.bg3);
       root.style.setProperty('--shell-border', theme.border);
       root.style.setProperty('--brand-text', theme.brand);
-
       root.style.setProperty('--lcd-bg', lcd.bg);
       root.style.setProperty('--lcd-pixel', lcd.pixel);
       root.style.setProperty('--lcd-ghost', lcd.ghost);
       root.style.setProperty('--lcd-ui', lcd.ui);
-
       localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
     }
 
@@ -920,10 +996,8 @@
          const stored = localStorage.getItem(PREFS_KEY);
          if (stored) prefs = { ...prefs, ...JSON.parse(stored) };
        } catch(e) {}
-       
        const hapticBtn = document.getElementById('hapticToggleBtn');
        if (hapticBtn) hapticBtn.textContent = prefs.hapticsEnabled ? '📳' : '📴';
-       
        applyPrefs();
     }
 
@@ -992,15 +1066,15 @@
     }
 
     function playerBattleAction(btn) {
-       if (btn === 'A') { // BITE
+       if (btn === 'A') { 
           sound.munch();
           battle.enemyHp -= 25;
           showReaction("BITE!");
-       } else if (btn === 'B') { // BLOCK
+       } else if (btn === 'B') { 
           sound.scuttle();
           battle.isBlocking = true;
           showReaction("BLOCK!");
-       } else if (btn === 'SELECT') { // THROW
+       } else if (btn === 'SELECT') { 
           if (pet.hunger >= 5) {
              pet.hunger -= 5;
              sound.thud();
@@ -1012,7 +1086,7 @@
              showReaction("Need Trash!");
              return;
           }
-       } else if (btn === 'START') { // FLEE
+       } else if (btn === 'START') { 
           if (Math.random() > 0.5) {
              sound.scuttle();
              endBattle(false, "Got away safely!");
@@ -1036,7 +1110,7 @@
        if (!battle.active) return;
        sound.hiss();
        let dmg = battle.enemy.dmg;
-       if (pet.hunger > 100) dmg = Math.floor(dmg * 1.3); // Fat penalty
+       if (pet.hunger > 100) dmg = Math.floor(dmg * 1.3); 
        if (battle.isBlocking) dmg = Math.floor(dmg / 2);
        battle.isBlocking = false;
 
@@ -1079,9 +1153,7 @@
           pet.energy = Math.max(0, pet.energy - 30);
           
           let availableItems = [];
-          if (pet.inventory) {
-              availableItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0);
-          }
+          if (pet.inventory) availableItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0);
           
           if (availableItems.length > 0) {
               const stolenItemKey = availableItems[Math.floor(Math.random() * availableItems.length)];
@@ -1092,7 +1164,6 @@
           } else {
               msg += ` You were too broke to rob!`;
           }
-          
           setLog(msg);
        }
        updateHUD();
@@ -1156,22 +1227,19 @@
             const diffMs = now - pet.lastSaved;
             const diffMinutes = Math.floor(diffMs / 60000);
             const diff10s = Math.floor(diffMs / 10000);
-            
             if (diff10s > 0) {
               pet.ageMinutes += diffMinutes;
-              if (pet.isSleeping) {
-                pet.energy = Math.min(100, pet.energy + (8 * diff10s));
-              } else {
+              if (pet.isSleeping) pet.energy = Math.min(100, pet.energy + (8 * diff10s));
+              else {
                 pet.hunger = Math.max(0, pet.hunger - (2.5 * diff10s));
                 pet.chaos = Math.min(100, pet.chaos + (2 * diff10s));
                 pet.grease = Math.max(0, pet.grease - (1 * diff10s));
                 pet.energy = Math.max(0, pet.energy - (1.5 * diff10s));
               }
-              console.log(`Loaded Jimothy. Missed ${diff10s} ticks while away.`);
             }
           }
         }
-      } catch(e) { console.warn("Save load error, starting fresh", e); }
+      } catch(e) {}
     }
 
     function gainXp(amount) {
@@ -1190,37 +1258,20 @@
       if (leveledUp) {
         pet.awardsUnlocked = pet.awardsUnlocked || [];
         const MILESTONES = [
-          { level: 5, emoji: "🥉", name: "BRONZE BIN" },
-          { level: 10, emoji: "🥈", name: "SILVER SCRAPS" },
-          { level: 25, emoji: "🥇", name: "GOLD GARBAGE" },
-          { level: 50, emoji: "💎", name: "DIAMOND DUMPSTER" },
-          { level: 100, emoji: "🌌", name: "COSMIC COMPOST" },
-          { level: 200, emoji: "☣️", name: "TOXIC TREASURE" },
-          { level: 300, emoji: "🛸", name: "ALIEN ARTIFACT" },
-          { level: 400, emoji: "🏰", name: "TRASH CASTLE" },
-          { level: 500, emoji: "🪐", name: "PLANET PLUNDER" },
-          { level: 600, emoji: "☄️", name: "METEORIC MUCK" },
-          { level: 700, emoji: "🔮", name: "MYSTIC MUD" },
-          { level: 800, emoji: "⚡", name: "OMNI-OOZE" },
-          { level: 900, emoji: "🌠", name: "STELLAR SCRAPS" },
-          { level: 1000, emoji: "♾️", name: "INFINITE TRASH" }
+          { level: 5, emoji: "🥉", name: "BRONZE BIN" }, { level: 10, emoji: "🥈", name: "SILVER SCRAPS" },
+          { level: 25, emoji: "🥇", name: "GOLD GARBAGE" }, { level: 50, emoji: "💎", name: "DIAMOND DUMPSTER" },
+          { level: 100, emoji: "🌌", name: "COSMIC COMPOST" }, { level: 200, emoji: "☣️", name: "TOXIC TREASURE" },
+          { level: 300, emoji: "🛸", name: "ALIEN ARTIFACT" }, { level: 400, emoji: "🏰", name: "TRASH CASTLE" },
+          { level: 500, emoji: "🪐", name: "PLANET PLUNDER" }, { level: 600, emoji: "☄️", name: "METEORIC MUCK" }
         ];
-        
         let newAward = null;
         MILESTONES.forEach(m => {
             if (pet.level >= m.level && !pet.awardsUnlocked.includes(m.level)) {
-                newAward = m;
-                pet.awardsUnlocked.push(m.level);
+                newAward = m; pet.awardsUnlocked.push(m.level);
             }
         });
-
-        if (newAward) {
-            showAward(newAward.emoji, newAward.name);
-        } else {
-            sound.fanfare();
-            showReaction(`⭐ LEVEL ${pet.level}!`, 2500);
-        }
-        
+        if (newAward) showAward(newAward.emoji, newAward.name);
+        else { sound.fanfare(); showReaction(`⭐ LEVEL ${pet.level}!`, 2500); }
         setLog(`Jimothy leveled up to LVL ${pet.level}! Energy restored.`);
         checkEvolution();
       }
@@ -1228,27 +1279,17 @@
 
     function showAward(emoji, title) {
       const awardScreen = document.getElementById('awardScreen');
-      const awardIcon = document.getElementById('awardIcon');
-      const awardText = document.getElementById('awardText');
-      
-      awardIcon.textContent = emoji;
-      awardText.textContent = title;
-      
+      document.getElementById('awardIcon').textContent = emoji;
+      document.getElementById('awardText').textContent = title;
       awardScreen.classList.remove('hidden');
       awardScreen.classList.add('flex');
-      
       sound.fanfare();
       setTimeout(() => sound.trill(), 600);
-      
-      setTimeout(() => {
-        awardScreen.classList.add('hidden');
-        awardScreen.classList.remove('flex');
-      }, 4000);
+      setTimeout(() => { awardScreen.classList.add('hidden'); awardScreen.classList.remove('flex'); }, 4000);
     }
 
     function checkEvolution() {
       const oldStage = pet.stage;
-      
       if (pet.level >= 20 && pet.shinyCaps >= 25 && pet.chaos >= 90) pet.stage = 'deity';
       else if (pet.level >= 10 && pet.shinyCaps >= 10 && pet.chaos >= 70) pet.stage = 'emperor';
       else if (pet.level >= 5 && pet.grease >= 75) pet.stage = 'goblin';
@@ -1267,20 +1308,13 @@
         showReaction("⚡ EVOLVED! ⚡", 2500);
         notifier.send('evolve', 'Jimothy Mutated! ⚡', `God help us all, he's now a ${title}...`, 0);
       }
-      
       let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
       elements.rankBadge.textContent = `LVL ${pet.level} ${title}`;
-      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`;
     }
 
-    let isMenuOpen = false;
-    let menuIndex = 0;
+    let isMenuOpen = false, menuIndex = 0;
     const MENU_OPTIONS = ["✨ AI FORAGE", "🎒 INVENTORY", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
-
-    let isInventoryOpen = false;
-    let invIndex = 0;
-    let invItems = [];
-    
+    let isInventoryOpen = false, invIndex = 0, invItems = [];
     const ITEM_DB = {
       'battery': { icon: '🔋', name: 'AA Battery', desc: 'Spicy tube. ENERGY+25 CHAOS+10', use: () => { pet.energy+=25; pet.chaos+=10; sound.scuttle(); } },
       'sludge': { icon: '🧪', name: 'Glow Sludge', desc: 'Delicious. GREASE+30 TRASH+10', use: () => { pet.grease+=30; pet.hunger+=10; sound.munch(); } },
@@ -1295,10 +1329,7 @@
       MENU_OPTIONS.forEach((opt, idx) => {
         const item = document.createElement('div');
         item.className = `p-1 rounded flex items-center transition-colors duration-100 ${idx === menuIndex ? 'shadow-inner' : ''}`;
-        if (idx === menuIndex) {
-          item.style.backgroundColor = 'var(--lcd-pixel)';
-          item.style.color = 'var(--lcd-bg)';
-        }
+        if (idx === menuIndex) { item.style.backgroundColor = 'var(--lcd-pixel)'; item.style.color = 'var(--lcd-bg)'; }
         item.textContent = (idx === menuIndex ? '▶ ' : '  ') + opt;
         list.appendChild(item);
       });
@@ -1308,115 +1339,66 @@
       if (pet.inMiniGame || pet.inHeistGame) return;
       isMenuOpen = !isMenuOpen;
       const menuDiv = document.getElementById('menuScreen');
-      if (isMenuOpen) {
-        menuIndex = 0;
-        menuDiv.classList.remove('hidden');
-        menuDiv.classList.add('flex');
-        renderMenu();
-        sound.beep();
-      } else {
-        menuDiv.classList.add('hidden');
-        menuDiv.classList.remove('flex');
-        sound.beep();
-      }
+      if (isMenuOpen) { menuIndex = 0; menuDiv.classList.remove('hidden'); menuDiv.classList.add('flex'); renderMenu(); sound.beep(); } 
+      else { menuDiv.classList.add('hidden'); menuDiv.classList.remove('flex'); sound.beep(); }
     }
 
     function toggleInventory() {
       if (pet.inMiniGame || pet.inHeistGame) return;
       isInventoryOpen = !isInventoryOpen;
       const invDiv = document.getElementById('inventoryScreen');
-      if (isInventoryOpen) {
-        invDiv.classList.remove('hidden');
-        invDiv.classList.add('flex');
-        renderInventory();
-        sound.beep();
-      } else {
-        invDiv.classList.add('hidden');
-        invDiv.classList.remove('flex');
-        sound.beep();
-      }
+      if (isInventoryOpen) { invDiv.classList.remove('hidden'); invDiv.classList.add('flex'); renderInventory(); sound.beep(); } 
+      else { invDiv.classList.add('hidden'); invDiv.classList.remove('flex'); sound.beep(); }
     }
 
     function renderInventory() {
       const grid = document.getElementById('inventoryGrid');
       const desc = document.getElementById('inventoryDesc');
       grid.innerHTML = '';
-      
       pet.inventory = pet.inventory || {};
       invItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0);
-      
-      if (invItems.length === 0) {
-        desc.innerHTML = "BAG IS EMPTY.<br/>Play RAID to find items!";
-        return;
-      }
-      
+      if (invItems.length === 0) { desc.innerHTML = "BAG IS EMPTY.<br/>Play RAID to find items!"; return; }
       if (invIndex >= invItems.length) invIndex = Math.max(0, invItems.length - 1);
-      
       invItems.forEach((itemId, idx) => {
-        const item = ITEM_DB[itemId];
-        const count = pet.inventory[itemId];
-        
+        const item = ITEM_DB[itemId], count = pet.inventory[itemId];
         const slot = document.createElement('div');
         slot.className = `w-full aspect-square border flex items-center justify-center relative text-lg sm:text-xl transition-all ${idx === invIndex ? 'shadow-inner' : ''}`;
         slot.style.borderColor = idx === invIndex ? 'var(--lcd-pixel)' : 'var(--lcd-ui)';
         slot.style.backgroundColor = idx === invIndex ? 'var(--lcd-pixel)' : 'transparent';
         slot.style.color = idx === invIndex ? 'var(--lcd-bg)' : 'var(--lcd-pixel)';
-        
-        slot.innerHTML = `
-          <span class="pixelated">${item.icon}</span>
-          <span class="absolute bottom-0 right-0.5 text-[6px] sm:text-[7px] font-bold">x${count}</span>
-        `;
+        slot.innerHTML = `<span class="pixelated">${item.icon}</span><span class="absolute bottom-0 right-0.5 text-[6px] sm:text-[7px] font-bold">x${count}</span>`;
         grid.appendChild(slot);
       });
-      
-      if (invItems.length > 0) {
-        const activeItem = ITEM_DB[invItems[invIndex]];
-        desc.innerHTML = `[${activeItem.name}]<br/>${activeItem.desc}`;
-      }
+      const activeItem = ITEM_DB[invItems[invIndex]];
+      desc.innerHTML = `[${activeItem.name}]<br/>${activeItem.desc}`;
     }
 
     function executeMenuOption() {
       const opt = MENU_OPTIONS[menuIndex];
       toggleMenu();
-      
-      if (opt.includes("NAP")) {
-        toggleNap();
-      } else if (opt.includes("LINT")) {
-        btnStart.click(); 
-      } else if (opt.includes("INVENTORY")) {
-        toggleInventory();
-      } else if (opt.includes("HEIST")) {
-        initHeistGame();
-      } else if (opt.includes("RESET")) {
+      if (opt.includes("NAP")) toggleNap();
+      else if (opt.includes("LINT")) btnStart.click(); 
+      else if (opt.includes("INVENTORY")) toggleInventory();
+      else if (opt.includes("HEIST")) initHeistGame();
+      else if (opt.includes("RESET")) {
         localStorage.removeItem(STATE_KEY); 
-        
         pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [], inMiniGame: false, inHeistGame: false };
-        
         if (pet.inMiniGame || pet.inHeistGame) {
           clearInterval(miniGameInterval);
           if (typeof heistInterval !== 'undefined') clearInterval(heistInterval);
           document.getElementById('miniGameScreen').classList.add('hidden');
           document.getElementById('miniGameScreen').classList.remove('flex');
-          pet.inMiniGame = false;
-          pet.inHeistGame = false;
         }
-        
         elements.graphic.classList.add('idle-anim');
         elements.eyes.style.display = 'block';
         elements.sleepZzz.style.display = 'none';
         const dreamBubble = document.getElementById('dreamBubble');
-        if (dreamBubble) {
-          dreamBubble.classList.add('hidden');
-          dreamBubble.classList.remove('flex');
-        }
+        if (dreamBubble) { dreamBubble.classList.add('hidden'); dreamBubble.classList.remove('flex'); }
         if (dreamInterval) clearInterval(dreamInterval);
-
         showReaction("🐣 REBORN KIT!");
         setLog("A fresh Jimothy crawled out of the recycling bin.");
         updateHUD();
-      } else if (opt.includes("AI FORAGE")) {
-         triggerRandomAntics();
-      }
+      } else if (opt.includes("AI FORAGE")) triggerRandomAntics();
     }
 
     function updateHUD() {
@@ -1424,10 +1406,8 @@
       pet.chaos = Math.min(100, Math.max(0, pet.chaos));
       pet.grease = Math.min(100, Math.max(0, pet.grease));
       pet.energy = Math.min(100, Math.max(0, pet.energy));
-
       elements.hungerBar.style.width = `${Math.min(100, pet.hunger)}%`;
       elements.hunger.textContent = `${Math.round(pet.hunger)}%`;
-      
       if (pet.hunger > 100) {
          elements.hungerBar.style.backgroundColor = '#fbbf24'; 
          document.getElementById('jimothyGraphic').style.transform = `scaleX(${1 + (pet.hunger - 100) / 100})`;
@@ -1435,90 +1415,39 @@
          elements.hungerBar.style.backgroundColor = 'var(--lcd-pixel)';
          document.getElementById('jimothyGraphic').style.transform = `scaleX(1)`;
       }
-
-      elements.chaosBar.style.width = `${pet.chaos}%`;
-      elements.chaos.textContent = `${Math.round(pet.chaos)}%`;
-
-      elements.greaseBar.style.width = `${pet.grease}%`;
-      elements.grease.textContent = `${Math.round(pet.grease)}%`;
-
-      elements.energyBar.style.width = `${pet.energy}%`;
-      elements.energy.textContent = `${Math.round(pet.energy)}%`;
-
+      elements.chaosBar.style.width = `${pet.chaos}%`; elements.chaos.textContent = `${Math.round(pet.chaos)}%`;
+      elements.greaseBar.style.width = `${pet.grease}%`; elements.grease.textContent = `${Math.round(pet.grease)}%`;
+      elements.energyBar.style.width = `${pet.energy}%`; elements.energy.textContent = `${Math.round(pet.energy)}%`;
       elements.capsVal.textContent = pet.shinyCaps;
-
-      checkEvolution();
-      updateClockDisplay();
-      
-      saveState();
+      checkEvolution(); updateClockDisplay(); saveState();
     }
 
     function updateClockDisplay() {
-      const now = new Date();
-      let hrs = now.getHours();
-      let mins = now.getMinutes();
-      
-      let displayHrs = hrs % 12 || 12;
-      let ampm = hrs >= 12 ? 'PM' : 'AM';
-      const timeClock = document.getElementById('timeClock');
-      if (timeClock) timeClock.textContent = `${displayHrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')} ${ampm}`;
-
-      const statusMoon = document.getElementById('statusMoon');
-      const starGroup = document.getElementById('starGroup');
-      let isDay = hrs >= 6 && hrs < 18;
-
-      const celestialBody = document.getElementById('celestialBody');
-      const streetLightBeam = document.getElementById('streetLightBeam');
-      
-      let f; 
-      
+      const now = new Date(), hrs = now.getHours(), mins = now.getMinutes();
+      const timeClock = document.getElementById('timeClock'), statusMoon = document.getElementById('statusMoon');
+      const starGroup = document.getElementById('starGroup'), celestialBody = document.getElementById('celestialBody'), streetLightBeam = document.getElementById('streetLightBeam');
+      if (timeClock) timeClock.textContent = `${(hrs % 12 || 12).toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')} ${hrs >= 12 ? 'PM' : 'AM'}`;
+      let isDay = hrs >= 6 && hrs < 18, f; 
       if (isDay) {
          f = (hrs - 6 + mins/60) / 12;
          if (statusMoon) statusMoon.textContent = '☀️';
          if (starGroup) starGroup.style.display = 'none';
          if (streetLightBeam) streetLightBeam.style.display = 'none';
-         if (celestialBody) {
-             celestialBody.innerHTML = `
-                 <circle cx="0" cy="0" r="3.5" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="-6" y1="0" x2="-8" y2="0" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="6" y1="0" x2="8" y2="0" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="0" y1="-6" x2="0" y2="-8" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="0" y1="6" x2="0" y2="8" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="-4" y1="-4" x2="-5.5" y2="-5.5" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="4" y1="4" x2="5.5" y2="5.5" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="-4" y1="4" x2="-5.5" y2="5.5" stroke="var(--lcd-pixel)" stroke-width="1"/>
-                 <line x1="4" y1="-4" x2="5.5" y2="-5.5" stroke="var(--lcd-pixel)" stroke-width="1"/>
-             `;
-         }
+         if (celestialBody) celestialBody.innerHTML = `<circle cx="0" cy="0" r="3.5" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/><line x1="-6" y1="0" x2="-8" y2="0" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="6" y1="0" x2="8" y2="0" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="0" y1="-6" x2="0" y2="-8" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="0" y1="6" x2="0" y2="8" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="-4" y1="-4" x2="-5.5" y2="-5.5" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="4" y1="4" x2="5.5" y2="5.5" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="-4" y1="4" x2="-5.5" y2="5.5" stroke="var(--lcd-pixel)" stroke-width="1"/><line x1="4" y1="-4" x2="5.5" y2="-5.5" stroke="var(--lcd-pixel)" stroke-width="1"/>`;
       } else {
-         let nightHrs = hrs >= 18 ? hrs - 18 : hrs + 6;
-         f = (nightHrs + mins/60) / 12;
+         f = ((hrs >= 18 ? hrs - 18 : hrs + 6) + mins/60) / 12;
          if (statusMoon) statusMoon.textContent = '🌙';
          if (starGroup) starGroup.style.display = 'block';
          if (streetLightBeam) streetLightBeam.style.display = 'block';
-         if (celestialBody) {
-             celestialBody.innerHTML = `<path d="M 0,-4 A 4.5,4.5 0 1,0 4,4 A 5.5,5.5 0 0,1 0,-4 Z" style="fill: var(--lcd-pixel);" stroke="none" />`;
-         }
+         if (celestialBody) celestialBody.innerHTML = `<path d="M 0,-4 A 4.5,4.5 0 1,0 4,4 A 5.5,5.5 0 0,1 0,-4 Z" style="fill: var(--lcd-pixel);" stroke="none" />`;
       }
-
-      if (celestialBody) {
-         const x = 20 + (f * 90); 
-         const y = 25 - (Math.sin(f * Math.PI) * 18);
-         celestialBody.setAttribute('transform', `translate(${x}, ${y})`);
-      }
+      if (celestialBody) celestialBody.setAttribute('transform', `translate(${20 + (f * 90)}, ${25 - (Math.sin(f * Math.PI) * 18)})`);
     }
 
     function throwTrashAtScreen() {
       if (pet.inMiniGame || pet.inHeistGame || pet.isSleeping || isAnimatingThrow) return;
       isAnimatingThrow = true;
-      
-      const projectiles = [
-        { emoji: "🍅", type: "splat", log: "a rotten tomato" },
-        { emoji: "🪨", type: "crack", log: "a heavy rock" },
-        { emoji: "🥦", type: "glitch", log: "cursed broccoli" },
-        { emoji: "🥫", type: "crack", log: "a soup can" }
-      ];
-      
+      const projectiles = [ { emoji: "🍅", type: "splat", log: "a rotten tomato" }, { emoji: "🪨", type: "crack", log: "a heavy rock" }, { emoji: "🥦", type: "glitch", log: "cursed broccoli" }, { emoji: "🥫", type: "crack", log: "a soup can" } ];
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
       sound.thud();
       elements.graphic.classList.remove('idle-anim');
@@ -1529,26 +1458,14 @@
         sound.hiss();
         showReaction("🤬 *YEET*");
         setLog(`Jimothy threw ${proj.log} at the screen!`);
-        
-        if (proj.type === 'splat') {
-           elements.screenSplat.classList.remove('hidden');
-           elements.screenSplat.classList.add('flex');
-           elements.splatGraphic.textContent = proj.emoji;
-           elements.splatGraphic.classList.add('splat-drip');
-        } else if (proj.type === 'crack') {
-           elements.screenCrack.classList.remove('hidden');
-        } else if (proj.type === 'glitch') {
-           elements.lcdScreen.classList.add('glitch-effect');
-        }
+        if (proj.type === 'splat') { elements.screenSplat.classList.remove('hidden'); elements.screenSplat.classList.add('flex'); elements.splatGraphic.textContent = proj.emoji; elements.splatGraphic.classList.add('splat-drip'); } 
+        else if (proj.type === 'crack') elements.screenCrack.classList.remove('hidden');
+        else if (proj.type === 'glitch') elements.lcdScreen.classList.add('glitch-effect');
       }, 300);
 
       setTimeout(() => {
-         elements.screenSplat.classList.add('hidden');
-         elements.screenSplat.classList.remove('flex');
-         elements.splatGraphic.classList.remove('splat-drip');
-         elements.screenCrack.classList.add('hidden');
-         elements.lcdScreen.classList.remove('glitch-effect');
-         
+         elements.screenSplat.classList.add('hidden'); elements.screenSplat.classList.remove('flex'); elements.splatGraphic.classList.remove('splat-drip');
+         elements.screenCrack.classList.add('hidden'); elements.lcdScreen.classList.remove('glitch-effect');
          if (!pet.isSleeping) elements.graphic.classList.add('idle-anim');
          isAnimatingThrow = false;
       }, 4000);
@@ -1556,43 +1473,21 @@
 
     function triggerRandomAntics() {
       const events = [
-        { text: "Chewed through an HDMI cable!", chaos: +10 },
-        { text: "Broke into the mainframe!", hunger: +10, chaos: +12 },
-        { text: "Hacked the Pentagon using a half-eaten modem.", chaos: +25 },
-        { text: "Knocked over a virtual potted plant.", chaos: +12 },
-        { text: "Found a spicy battery!", item: 'battery', chaos: +5 },
-        { text: "Dug up some glow sludge.", item: 'sludge' },
-        { text: "Stole a rubber rat!", item: 'rat_toy' }
+        { text: "Chewed through an HDMI cable!", chaos: +10 }, { text: "Broke into the mainframe!", hunger: +10, chaos: +12 },
+        { text: "Hacked the Pentagon.", chaos: +25 }, { text: "Knocked over a virtual potted plant.", chaos: +12 },
+        { text: "Found a spicy battery!", item: 'battery', chaos: +5 }, { text: "Dug up some glow sludge.", item: 'sludge' }, { text: "Stole a rubber rat!", item: 'rat_toy' }
       ];
       const ev = events[Math.floor(Math.random() * events.length)];
       if (ev.chaos) pet.chaos += ev.chaos;
       if (ev.hunger) pet.hunger += ev.hunger;
-      
-      if (ev.item) {
-        pet.inventory = pet.inventory || {};
-        pet.inventory[ev.item] = (pet.inventory[ev.item] || 0) + 1;
-        showReaction(`+${ITEM_DB[ev.item].icon}`);
-      } else {
-        showReaction("👀 *CRASH!*");
-      }
-      
-      gainXp(15);
-      setLog(ev.text);
-      sound.beep();
+      if (ev.item) { pet.inventory = pet.inventory || {}; pet.inventory[ev.item] = (pet.inventory[ev.item] || 0) + 1; showReaction(`+${ITEM_DB[ev.item].icon}`); } 
+      else showReaction("👀 *CRASH!*");
+      gainXp(15); setLog(ev.text); sound.beep();
     }
 
     let dreamInterval = null;
     const dreamEmojis = ["🌭", "🚗", "🔪", "🍕", "💰", "👑", "🐀", "🗑️", "🍗", "🥪"];
-    const dreamTexts = [
-      "Dreaming of an infinite hotdog...",
-      "Dreaming of stealing a sports car...",
-      "Dreaming of knife fighting a possum...",
-      "Dreaming of a throne of pizza boxes...",
-      "Dreaming of tax evasion...",
-      "Dreaming of the perfect garbage bag...",
-      "Dreaming of chasing the neighbor's dog...",
-      "Dreaming of the holy grail of grease..."
-    ];
+    const dreamTexts = ["Dreaming of an infinite hotdog...", "Dreaming of stealing a sports car...", "Dreaming of a throne of pizza boxes...", "Dreaming of tax evasion...", "Dreaming of the perfect garbage bag...", "Dreaming of the holy grail of grease..."];
 
     function cycleDreams() {
       if (!pet.isSleeping) return;
@@ -1603,84 +1498,38 @@
     setInterval(() => {
       pet.ageMinutes += 1;
       if (pet.isSleeping) {
-        pet.energy = Math.min(100, pet.energy + 8);
-        gainXp(1); 
+        pet.energy = Math.min(100, pet.energy + 8); gainXp(1); 
       } else {
-        pet.hunger = Math.max(0, pet.hunger - 2.5);
-        pet.chaos = Math.min(100, pet.chaos + 2);
-        pet.grease = Math.max(0, pet.grease - 1);
-        pet.energy = Math.max(0, pet.energy - 1.5);
-
+        pet.hunger = Math.max(0, pet.hunger - 2.5); pet.chaos = Math.min(100, pet.chaos + 2);
+        pet.grease = Math.max(0, pet.grease - 1); pet.energy = Math.max(0, pet.energy - 1.5);
         if (pet.hunger < 20) {
           notifier.send('hunger', 'Starvation Imminent! 🥫', 'Jimothy is chewing the drywall. Feed him!', 120000);
           if (!pet.inMiniGame && !pet.inHeistGame && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
-        } else if (pet.chaos > 85) {
-          notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. Coax him!', 120000);
-        }
+        } else if (pet.chaos > 85) notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. Coax him!', 120000);
 
         if (pet.chaos >= 60 && pet.hunger < 50 && Math.random() < 0.4) {
             if (!isAnimatingThrow) throwTrashAtScreen();
-        } else if (Math.random() < 0.20) {
-          triggerRandomAntics();
-        } else if (Math.random() < 0.15 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
-          triggerRandomEncounter();
-        } else if (Math.random() < 0.20 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
-          const anims = ['juggle', 'plates'];
-          const picked = anims[Math.floor(Math.random() * anims.length)];
-          const juggleG = document.getElementById('juggleProps');
-          const plateG = document.getElementById('plateProps');
-          if (picked === 'juggle') {
-             juggleG.style.display = 'block';
-             plateG.style.display = 'none';
-             setLog("Jimothy is juggling garbage!");
-          } else {
-             plateG.style.display = 'block';
-             juggleG.style.display = 'none';
-             setLog("Jimothy is spinning plates!");
-          }
+        } else if (Math.random() < 0.20) triggerRandomAntics();
+        else if (Math.random() < 0.15 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) triggerRandomEncounter();
+        else if (Math.random() < 0.20 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
+          const anims = ['juggle', 'plates'], picked = anims[Math.floor(Math.random() * anims.length)];
+          const juggleG = document.getElementById('juggleProps'), plateG = document.getElementById('plateProps');
+          if (picked === 'juggle') { juggleG.style.display = 'block'; plateG.style.display = 'none'; setLog("Jimothy is juggling garbage!"); } 
+          else { plateG.style.display = 'block'; juggleG.style.display = 'none'; setLog("Jimothy is spinning plates!"); }
           setTimeout(() => clearIdleAnims(), 6000);
         } else {
           gainXp(3);
-          let didBuild = false;
-          let didRearrange = false;
-
-          if (pet.raidFrenzy > 0) {
-              pet.raidFrenzy--;
-              pet.trashCollected = (pet.trashCollected || 0) + 8;
-              didBuild = true;
-              if (Math.random() < 0.35) didRearrange = true;
-              if (Math.random() < 0.4) setLog("RAID FRENZY! Palace building accelerated!");
-          } else if (pet.hunger >= 20) {
-              pet.hunger -= 3;
-              pet.trashCollected = (pet.trashCollected || 0) + 2;
-              didBuild = true;
-              if (Math.random() < 0.15) didRearrange = true; 
-              if (Math.random() < 0.2) setLog("Jimothy spent some TRASH to upgrade his palace.");
-          } else {
-              pet.trashCollected = (pet.trashCollected || 0) + 0.2;
-              if (Math.random() < 0.2) setLog("Need more TRASH to build palace...");
-          }
-
-          if (didRearrange) {
-              pet.palaceSeed = Math.random();
-              setLog("Jimothy is frantically rearranging his trash!");
-          }
-
+          let didBuild = false, didRearrange = false;
+          if (pet.raidFrenzy > 0) { pet.raidFrenzy--; pet.trashCollected = (pet.trashCollected || 0) + 8; didBuild = true; if (Math.random() < 0.35) didRearrange = true; if (Math.random() < 0.4) setLog("RAID FRENZY! Palace building accelerated!"); } 
+          else if (pet.hunger >= 20) { pet.hunger -= 3; pet.trashCollected = (pet.trashCollected || 0) + 2; didBuild = true; if (Math.random() < 0.15) didRearrange = true; if (Math.random() < 0.2) setLog("Jimothy spent some TRASH to upgrade his palace."); } 
+          else { pet.trashCollected = (pet.trashCollected || 0) + 0.2; if (Math.random() < 0.2) setLog("Need more TRASH to build palace..."); }
+          if (didRearrange) { pet.palaceSeed = Math.random(); setLog("Jimothy is frantically rearranging his trash!"); }
           if (didBuild && !isAnimatingThrow && !pet.isSleeping && !pet.inMiniGame && !pet.inHeistGame) {
               if (Math.random() < 0.4 || didRearrange) {
-                  elements.graphic.classList.remove('idle-anim');
-                  elements.graphic.classList.add('scurry-anim');
-                  sound.scuttle();
-                  
-                  setTimeout(() => {
-                      elements.graphic.classList.remove('scurry-anim');
-                      if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) {
-                          elements.graphic.classList.add('idle-anim');
-                      }
-                  }, didRearrange ? 2500 : 1200); 
+                  elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('scurry-anim'); sound.scuttle();
+                  setTimeout(() => { elements.graphic.classList.remove('scurry-anim'); if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) { elements.graphic.classList.add('idle-anim'); } }, didRearrange ? 2500 : 1200); 
               }
           }
-          
           drawTrashPalace();
         }
       }
@@ -1690,81 +1539,43 @@
     function toggleNap() {
       if (pet.inMiniGame) return;
       pet.isSleeping = !pet.isSleeping;
-      
       const dreamBubble = document.getElementById('dreamBubble');
-      
       if (pet.isSleeping) {
-        elements.graphic.classList.remove('idle-anim');
-        elements.eyes.style.display = 'none';
-        elements.sleepZzz.style.display = 'block';
-        if (dreamBubble) {
-          dreamBubble.classList.remove('hidden');
-          dreamBubble.classList.add('flex');
-        }
-        showReaction("💤 Snoring...");
-        cycleDreams();
-        dreamInterval = setInterval(cycleDreams, 3500);
-        sound.beep();
+        elements.graphic.classList.remove('idle-anim'); elements.eyes.style.display = 'none'; elements.sleepZzz.style.display = 'block';
+        if (dreamBubble) { dreamBubble.classList.remove('hidden'); dreamBubble.classList.add('flex'); }
+        showReaction("💤 Snoring..."); cycleDreams(); dreamInterval = setInterval(cycleDreams, 3500); sound.beep();
       } else {
-        elements.graphic.classList.add('idle-anim');
-        elements.eyes.style.display = 'block';
-        elements.sleepZzz.style.display = 'none';
-        if (dreamBubble) {
-          dreamBubble.classList.add('hidden');
-          dreamBubble.classList.remove('flex');
-        }
+        elements.graphic.classList.add('idle-anim'); elements.eyes.style.display = 'block'; elements.sleepZzz.style.display = 'none';
+        if (dreamBubble) { dreamBubble.classList.add('hidden'); dreamBubble.classList.remove('flex'); }
         if (dreamInterval) clearInterval(dreamInterval);
-        showReaction("👀 Awake!");
-        setLog("Jimothy's eyes popped open.");
-        sound.beep();
+        showReaction("👀 Awake!"); setLog("Jimothy's eyes popped open."); sound.beep();
       }
     }
 
-    let miniGameInterval = null;
-    let miniGameTimerVal = 15;
-    let dogWaking = 0;
-    let cansTipped = 0;
-
+    let miniGameInterval = null, miniGameTimerVal = 15, dogWaking = 0, cansTipped = 0;
     function initMiniGame() {
       if (pet.energy < 15) { showReaction("Too tired!"); sound.thud(); return; }
-      pet.inMiniGame = true;
-      miniGameTimerVal = 15;
-      cansTipped = 0;
-      dogWaking = 0;
-      document.getElementById('miniGameScreen').classList.remove('hidden');
-      document.getElementById('miniGameScreen').classList.add('flex');
+      pet.inMiniGame = true; miniGameTimerVal = 15; cansTipped = 0; dogWaking = 0;
+      document.getElementById('miniGameScreen').classList.remove('hidden'); document.getElementById('miniGameScreen').classList.add('flex');
       document.getElementById('gameTitle').textContent = "MIDNIGHT RAID";
       renderGameScreen();
-
       miniGameInterval = setInterval(() => {
-        miniGameTimerVal--;
-        document.getElementById('gameTimer').textContent = `TIME: ${miniGameTimerVal}s`;
+        miniGameTimerVal--; document.getElementById('gameTimer').textContent = `TIME: ${miniGameTimerVal}s`;
         if (Math.random() > 0.45) dogWaking++;
         renderGameScreen();
-
-        if (dogWaking >= 4) {
-          endMiniGame(false, "BARK! The neighbor's dog chased you away!");
-        } else if (miniGameTimerVal <= 0) {
-          endMiniGame(true, `Secured ${cansTipped} bins of trash!`);
-        }
+        if (dogWaking >= 4) endMiniGame(false, "BARK! The neighbor's dog chased you away!");
+        else if (miniGameTimerVal <= 0) endMiniGame(true, `Secured ${cansTipped} bins of trash!`);
       }, 1000);
     }
 
     function renderGameScreen() {
-      const arena = document.getElementById('gameArena');
-      const dogIcons = ["😴 Zzz", "🐕 Stirring", "👀 Watching!", "🚨 BARKING!"];
+      const arena = document.getElementById('gameArena'), dogIcons = ["😴 Zzz", "🐕 Stirring", "👀 Watching!", "🚨 BARKING!"];
       arena.innerHTML = `
         <div class="w-full h-full flex flex-col justify-between p-2" style="color: var(--lcd-pixel);">
-          <div class="flex justify-between text-[7px] font-bold">
-            <span>BINS: ${cansTipped}</span>
-            <span>${dogIcons[Math.min(3, dogWaking)]}</span>
-          </div>
+          <div class="flex justify-between text-[7px] font-bold"><span>BINS: ${cansTipped}</span><span>${dogIcons[Math.min(3, dogWaking)]}</span></div>
           <div class="flex items-center justify-around text-2xl py-1">
-            <span class="text-xl">🦝</span>
-            <span class="text-3xl animate-bounce">🗑️</span>
-            <span class="text-[7px] font-bold px-1 py-0.5 rounded border" style="border-color: var(--lcd-pixel);">
-              ${dogWaking > 1 ? "⚠️ HIDE (B)" : "LOOT (A)"}
-            </span>
+            <span class="text-xl">🦝</span><span class="text-3xl animate-bounce">🗑️</span>
+            <span class="text-[7px] font-bold px-1 py-0.5 rounded border" style="border-color: var(--lcd-pixel);">${dogWaking > 1 ? "⚠️ HIDE (B)" : "LOOT (A)"}</span>
           </div>
           <div class="w-full h-1.5 rounded overflow-hidden" style="background-color: var(--lcd-ui);">
             <div class="h-full transition-all duration-300" style="background-color: var(--lcd-pixel); width: ${(dogWaking / 4) * 100}%;"></div>
@@ -1775,132 +1586,67 @@
 
     function miniGameHandleButton(btn) {
       if (btn === 'A') {
-        if (dogWaking >= 3) {
-          sound.hiss();
-          dogWaking += 2; 
-          renderGameScreen();
-        } else {
-          sound.munch();
-          cansTipped++;
-          dogWaking = Math.min(3, dogWaking + 1);
-          
+        if (dogWaking >= 3) { sound.hiss(); dogWaking += 2; renderGameScreen(); } 
+        else {
+          sound.munch(); cansTipped++; dogWaking = Math.min(3, dogWaking + 1);
           if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++;
-          
           if (Math.random() > 0.8) {
-             const itemKeys = Object.keys(ITEM_DB);
-             const randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-             pet.inventory = pet.inventory || {};
-             pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
-             showReaction(`Found ${ITEM_DB[randomItem].icon}!`);
-             sound.fanfare();
-          } else {
-             showReaction("Scavenging...");
-          }
-          
+             const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+             pet.inventory = pet.inventory || {}; pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
+             showReaction(`Found ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
+          } else showReaction("Scavenging...");
           renderGameScreen();
         }
       } else if (btn === 'B') {
-        if (pet.hunger > 100 && Math.random() < 0.3) {
-           sound.thud();
-           showReaction("Too fat to hide!"); 
-        } else {
-           sound.scuttle();
-           dogWaking = Math.max(0, dogWaking - 1); 
-        }
+        if (pet.hunger > 100 && Math.random() < 0.3) { sound.thud(); showReaction("Too fat to hide!"); } 
+        else { sound.scuttle(); dogWaking = Math.max(0, dogWaking - 1); }
         renderGameScreen();
       }
     }
 
     function endMiniGame(won, message) {
-      clearInterval(miniGameInterval);
-      pet.inMiniGame = false;
-      document.getElementById('miniGameScreen').classList.add('hidden');
-      document.getElementById('miniGameScreen').classList.remove('flex');
+      clearInterval(miniGameInterval); pet.inMiniGame = false;
+      document.getElementById('miniGameScreen').classList.add('hidden'); document.getElementById('miniGameScreen').classList.remove('flex');
       pet.energy -= 20;
-
       if (won) {
-        sound.fanfare();
-        let loot = cansTipped * 15;
-        pet.trashCollected = (pet.trashCollected || 0) + loot;
-        pet.hunger = Math.min(100, pet.hunger + (cansTipped * 8)); 
-        pet.raidFrenzy = 6; 
-        pet.chaos += 10;
-        pet.grease += 5;
-        gainXp(50 + (cansTipped * 10)); 
-        showReaction(`👑 +${loot} TRASH!`);
-        message = `Looted ${cansTipped} bins & triggered a BUILD FRENZY!`;
+        sound.fanfare(); let loot = cansTipped * 15; pet.trashCollected = (pet.trashCollected || 0) + loot;
+        pet.hunger = Math.min(100, pet.hunger + (cansTipped * 8)); pet.raidFrenzy = 6; pet.chaos += 10; pet.grease += 5;
+        gainXp(50 + (cansTipped * 10)); showReaction(`👑 +${loot} TRASH!`); message = `Looted ${cansTipped} bins & triggered a BUILD FRENZY!`;
       } else {
-        document.getElementById('jimothyGraphic').classList.remove('idle-anim');
-        document.getElementById('jimothyGraphic').classList.add('shake-anim');
-        setTimeout(() => { 
-            document.getElementById('jimothyGraphic').classList.remove('shake-anim'); 
-            if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim');
-        }, 700);
+        document.getElementById('jimothyGraphic').classList.remove('idle-anim'); document.getElementById('jimothyGraphic').classList.add('shake-anim');
+        setTimeout(() => { document.getElementById('jimothyGraphic').classList.remove('shake-anim'); if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim'); }, 700);
         showReaction("💨 SCRAMBLED!");
       }
-      setLog(message);
-      updateHUD();
+      setLog(message); updateHUD();
     }
 
-    let heistInterval = null;
-    let heistTimerVal = 20;
-    let suspicion = 0;
-    let heistLoot = 0;
-
+    let heistInterval = null, heistTimerVal = 20, suspicion = 0, heistLoot = 0;
     function initHeistGame() {
       const hrs = new Date().getHours();
-      if (hrs >= 6 && hrs < 18) {
-        showReaction("☀️ Too bright!");
-        setLog("Jimothy refuses to burgle in broad daylight. Wait until night!");
-        sound.hiss();
-        return;
-      }
+      if (hrs >= 6 && hrs < 18) { showReaction("☀️ Too bright!"); setLog("Jimothy refuses to burgle in broad daylight. Wait until night!"); sound.hiss(); return; }
       if (pet.energy < 20) { showReaction("Too tired!"); sound.thud(); return; }
-      
-      pet.inHeistGame = true;
-      heistTimerVal = 20;
-      heistLoot = 0;
-      suspicion = 0;
-      
-      document.getElementById('miniGameScreen').classList.remove('hidden');
-      document.getElementById('miniGameScreen').classList.add('flex');
+      pet.inHeistGame = true; heistTimerVal = 20; heistLoot = 0; suspicion = 0;
+      document.getElementById('miniGameScreen').classList.remove('hidden'); document.getElementById('miniGameScreen').classList.add('flex');
       document.getElementById('gameTitle').textContent = "NIGHT HEIST";
       renderHeistScreen();
-
       heistInterval = setInterval(() => {
-        heistTimerVal--;
-        document.getElementById('gameTimer').textContent = `TIME: ${heistTimerVal}s`;
-        
+        heistTimerVal--; document.getElementById('gameTimer').textContent = `TIME: ${heistTimerVal}s`;
         if (Math.random() > 0.3) suspicion += 10;
-        
         renderHeistScreen();
-
-        if (suspicion >= 100) {
-          endHeistGame(false, "🔦 BUSTED! The homeowner caught you!");
-        } else if (heistTimerVal <= 0) {
-          endHeistGame(true, `Escaped with ${heistLoot} stolen goods!`);
-        }
+        if (suspicion >= 100) endHeistGame(false, "🔦 BUSTED! The homeowner caught you!");
+        else if (heistTimerVal <= 0) endHeistGame(true, `Escaped with ${heistLoot} stolen goods!`);
       }, 1000);
     }
 
     function renderHeistScreen() {
       const arena = document.getElementById('gameArena');
-      let statusText = "👻 SNEAKING";
-      if (suspicion > 50) statusText = "👀 SUSPICIOUS";
-      if (suspicion > 80) statusText = "🔦 SEARCHING!";
-      
+      let statusText = "👻 SNEAKING"; if (suspicion > 50) statusText = "👀 SUSPICIOUS"; if (suspicion > 80) statusText = "🔦 SEARCHING!";
       arena.innerHTML = `
         <div class="w-full h-full flex flex-col justify-between p-2" style="color: var(--lcd-pixel);">
-          <div class="flex justify-between text-[7px] font-bold">
-            <span>LOOT: ${heistLoot}</span>
-            <span class="${suspicion > 80 ? 'animate-pulse' : ''}">${statusText}</span>
-          </div>
+          <div class="flex justify-between text-[7px] font-bold"><span>LOOT: ${heistLoot}</span><span class="${suspicion > 80 ? 'animate-pulse' : ''}">${statusText}</span></div>
           <div class="flex items-center justify-around text-2xl py-1">
-            <span class="text-xl">🦝</span>
-            <span class="text-3xl">🏠</span>
-            <span class="text-[7px] font-bold px-1 py-0.5 rounded border" style="border-color: var(--lcd-pixel);">
-              ${suspicion > 60 ? "⚠️ FREEZE(B)" : "SNATCH(A)"}
-            </span>
+            <span class="text-xl">🦝</span><span class="text-3xl">🏠</span>
+            <span class="text-[7px] font-bold px-1 py-0.5 rounded border" style="border-color: var(--lcd-pixel);">${suspicion > 60 ? "⚠️ FREEZE(B)" : "SNATCH(A)"}</span>
           </div>
           <div class="w-full h-1.5 rounded overflow-hidden" style="background-color: var(--lcd-ui);">
             <div class="h-full transition-all duration-300 ${suspicion > 80 ? 'bg-red-500' : ''}" style="background-color: var(--lcd-pixel); width: ${Math.min(100, suspicion)}%;"></div>
@@ -1911,266 +1657,123 @@
 
     function heistHandleButton(btn) {
       if (btn === 'A') {
-        if (suspicion >= 85) {
-          sound.hiss();
-          suspicion += 20; 
-          renderHeistScreen();
-        } else {
-          sound.munch();
-          heistLoot++;
-          suspicion += 15 + Math.floor(Math.random() * 10);
-          
+        if (suspicion >= 85) { sound.hiss(); suspicion += 20; renderHeistScreen(); } 
+        else {
+          sound.munch(); heistLoot++; suspicion += 15 + Math.floor(Math.random() * 10);
           if (Math.random() > 0.5) {
-             const itemKeys = Object.keys(ITEM_DB);
-             const randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
-             pet.inventory = pet.inventory || {};
-             pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
-             showReaction(`Stole ${ITEM_DB[randomItem].icon}!`);
-             sound.fanfare();
-          } else {
-             showReaction("Snatch!");
-          }
+             const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+             pet.inventory = pet.inventory || {}; pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
+             showReaction(`Stole ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
+          } else showReaction("Snatch!");
           renderHeistScreen();
         }
-      } else if (btn === 'B') {
-        sound.scuttle();
-        suspicion = Math.max(0, suspicion - 30); 
-        showReaction("Frozen...");
-        renderHeistScreen();
-      }
+      } else if (btn === 'B') { sound.scuttle(); suspicion = Math.max(0, suspicion - 30); showReaction("Frozen..."); renderHeistScreen(); }
     }
 
     function endHeistGame(won, message) {
-      clearInterval(heistInterval);
-      pet.inHeistGame = false;
-      document.getElementById('miniGameScreen').classList.add('hidden');
-      document.getElementById('miniGameScreen').classList.remove('flex');
+      clearInterval(heistInterval); pet.inHeistGame = false;
+      document.getElementById('miniGameScreen').classList.add('hidden'); document.getElementById('miniGameScreen').classList.remove('flex');
       pet.energy -= 25;
-
       if (won) {
-        sound.fanfare();
-        let lootTrash = heistLoot * 10;
-        pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
-        pet.hunger = Math.min(150, pet.hunger + (heistLoot * 5)); 
-        pet.chaos += 20;
-        pet.shinyCaps += Math.floor(heistLoot / 2); 
-        gainXp(100 + (heistLoot * 15)); 
-        showReaction(`👑 HEIST SUCCESS!`);
+        sound.fanfare(); let lootTrash = heistLoot * 10; pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
+        pet.hunger = Math.min(150, pet.hunger + (heistLoot * 5)); pet.chaos += 20; pet.shinyCaps += Math.floor(heistLoot / 2); 
+        gainXp(100 + (heistLoot * 15)); showReaction(`👑 HEIST SUCCESS!`);
       } else {
-        document.getElementById('jimothyGraphic').classList.remove('idle-anim');
-        document.getElementById('jimothyGraphic').classList.add('shake-anim');
-        setTimeout(() => { 
-            document.getElementById('jimothyGraphic').classList.remove('shake-anim'); 
-            if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim');
-        }, 700);
-        showReaction("🚨 BUSTED!");
-        
-        pet.hunger = Math.max(0, pet.hunger - 20);
-        
+        document.getElementById('jimothyGraphic').classList.remove('idle-anim'); document.getElementById('jimothyGraphic').classList.add('shake-anim');
+        setTimeout(() => { document.getElementById('jimothyGraphic').classList.remove('shake-anim'); if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim'); }, 700);
+        showReaction("🚨 BUSTED!"); pet.hunger = Math.max(0, pet.hunger - 20);
         let availableItems = Object.keys(pet.inventory || {}).filter(k => pet.inventory[k] > 0);
         if (availableItems.length > 0) {
             const stolenItemKey = availableItems[Math.floor(Math.random() * availableItems.length)];
-            pet.inventory[stolenItemKey]--;
-            const item = ITEM_DB[stolenItemKey];
-            message += ` Dropped your ${item.icon} while running!`;
+            pet.inventory[stolenItemKey]--; const item = ITEM_DB[stolenItemKey]; message += ` Dropped your ${item.icon} while running!`;
         }
       }
-      setLog(message);
-      updateHUD();
+      setLog(message); updateHUD();
     }
 
     function drawTrashPalace() {
-      const tc = pet.trashCollected || 0;
-      const g = document.getElementById('trashPalaceGroup');
-      if (!g) return;
-      
-      const seed = pet.palaceSeed || 0.5;
-      const offset1 = ((seed * 123) % 1) * 20; 
-      const offset2 = ((seed * 456) % 1) * 30 - 10; 
-      const offset3 = ((seed * 789) % 1) * 30 - 5; 
-      const offset4 = ((seed * 321) % 1) * 30 - 15; 
-      const offset5 = ((seed * 654) % 1) * 20 - 10; 
-
+      const tc = pet.trashCollected || 0, g = document.getElementById('trashPalaceGroup'); if (!g) return;
+      const seed = pet.palaceSeed || 0.5, offset1 = ((seed * 123) % 1) * 20, offset2 = ((seed * 456) % 1) * 30 - 10; 
+      const offset3 = ((seed * 789) % 1) * 30 - 5, offset4 = ((seed * 321) % 1) * 30 - 15, offset5 = ((seed * 654) % 1) * 20 - 10; 
       let html = '';
-
-      if (tc > 30) {
-        html += `<g transform="translate(${offset1}, 0)">
-                 <path d="M 5,65 L 5,45 L 30,45 L 30,65" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="5" y1="48" x2="30" y2="48" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <text x="8" y="57" font-size="5" font-family="monospace" fill="var(--lcd-pixel)">FRAGILE</text>
-                 <path d="M 5,45 L 1,39 M 30,45 L 34,39" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 </g>`;
-      }
-      if (tc > 90) {
-        html += `<g transform="translate(${offset2}, 0)">
-                 <rect x="32" y="60" width="18" height="2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <rect x="33" y="57" width="16" height="2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <rect x="12" y="32" width="14" height="13" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="12" y1="36" x2="26" y2="36" stroke-width="0.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="12" y1="40" x2="26" y2="40" stroke-width="0.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="16" y1="32" x2="16" y2="45" stroke-width="0.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="22" y1="32" x2="22" y2="45" stroke-width="0.5" stroke="var(--lcd-pixel)"/>
-                 </g>`;
-      }
-      if (tc > 180) {
-        html += `<g transform="translate(${offset3}, 0)">
-                 <circle cx="45" cy="55" r="7" fill="none" stroke-width="2" stroke="var(--lcd-pixel)"/>
-                 <circle cx="45" cy="55" r="3" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <rect x="13" y="20" width="12" height="12" rx="1" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <rect x="15" y="22" width="8" height="8" rx="0.5" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <line x1="15" y1="20" x2="12" y2="15" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <line x1="19" y1="20" x2="24" y2="14" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 </g>`;
-      }
-      if (tc > 300) {
-        html += `<g transform="translate(${offset4}, 0)">
-                 <line x1="30" y1="45" x2="52" y2="65" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="32" y1="44" x2="54" y2="64" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="2" y1="45" x2="2" y2="15" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <path d="M 2,15 Q 8,12 12,18 Q 8,22 2,20 Z" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/>
-                 <path d="M 3,16 Q 8,13 11,18 Q 8,21 3,19 Z" fill="var(--lcd-pixel)" opacity="0.3"/>
-                 </g>`;
-      }
-      if (tc > 500) {
-        html += `<g transform="translate(${offset5}, 0)">
-                 <path d="M -5,10 Q 20,-5 45,10 Z" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <line x1="20" y1="10" x2="20" y2="20" stroke-width="1.5" stroke="var(--lcd-pixel)"/>
-                 <path d="M -5,10 Q 10,20 25,10 Q 35,18 45,10" fill="none" stroke-dasharray="1,4" stroke-width="2" stroke="var(--lcd-pixel)" class="flicker-anim"/>
-                 <polygon points="20,-2 22,2 26,2 23,5 24,9 20,7 16,9 17,5 14,2 18,2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)" class="twinkle-anim"/>
-                 </g>`;
-      }
-
-      g.innerHTML = html;
-      g.style.opacity = '0.45'; 
+      if (tc > 30) html += `<g transform="translate(${offset1}, 0)"><path d="M 5,65 L 5,45 L 30,45 L 30,65" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/><line x1="5" y1="48" x2="30" y2="48" stroke-width="1" stroke="var(--lcd-pixel)"/><text x="8" y="57" font-size="5" font-family="monospace" fill="var(--lcd-pixel)">FRAGILE</text><path d="M 5,45 L 1,39 M 30,45 L 34,39" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/></g>`;
+      if (tc > 90) html += `<g transform="translate(${offset2}, 0)"><rect x="32" y="60" width="18" height="2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/><rect x="33" y="57" width="16" height="2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/><rect x="12" y="32" width="14" height="13" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/><line x1="12" y1="36" x2="26" y2="36" stroke-width="0.5" stroke="var(--lcd-pixel)"/><line x1="12" y1="40" x2="26" y2="40" stroke-width="0.5" stroke="var(--lcd-pixel)"/><line x1="16" y1="32" x2="16" y2="45" stroke-width="0.5" stroke="var(--lcd-pixel)"/><line x1="22" y1="32" x2="22" y2="45" stroke-width="0.5" stroke="var(--lcd-pixel)"/></g>`;
+      if (tc > 180) html += `<g transform="translate(${offset3}, 0)"><circle cx="45" cy="55" r="7" fill="none" stroke-width="2" stroke="var(--lcd-pixel)"/><circle cx="45" cy="55" r="3" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/><rect x="13" y="20" width="12" height="12" rx="1" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/><rect x="15" y="22" width="8" height="8" rx="0.5" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/><line x1="15" y1="20" x2="12" y2="15" stroke-width="1" stroke="var(--lcd-pixel)"/><line x1="19" y1="20" x2="24" y2="14" stroke-width="1" stroke="var(--lcd-pixel)"/></g>`;
+      if (tc > 300) html += `<g transform="translate(${offset4}, 0)"><line x1="30" y1="45" x2="52" y2="65" stroke-width="1.5" stroke="var(--lcd-pixel)"/><line x1="32" y1="44" x2="54" y2="64" stroke-width="1.5" stroke="var(--lcd-pixel)"/><line x1="2" y1="45" x2="2" y2="15" stroke-width="1.5" stroke="var(--lcd-pixel)"/><path d="M 2,15 Q 8,12 12,18 Q 8,22 2,20 Z" fill="none" stroke-width="1" stroke="var(--lcd-pixel)"/><path d="M 3,16 Q 8,13 11,18 Q 8,21 3,19 Z" fill="var(--lcd-pixel)" opacity="0.3"/></g>`;
+      if (tc > 500) html += `<g transform="translate(${offset5}, 0)"><path d="M -5,10 Q 20,-5 45,10 Z" fill="none" stroke-width="1.5" stroke="var(--lcd-pixel)"/><line x1="20" y1="10" x2="20" y2="20" stroke-width="1.5" stroke="var(--lcd-pixel)"/><path d="M -5,10 Q 10,20 25,10 Q 35,18 45,10" fill="none" stroke-dasharray="1,4" stroke-width="2" stroke="var(--lcd-pixel)" class="flicker-anim"/><polygon points="20,-2 22,2 26,2 23,5 24,9 20,7 16,9 17,5 14,2 18,2" fill="none" stroke-width="1" stroke="var(--lcd-pixel)" class="twinkle-anim"/></g>`;
+      g.innerHTML = html; g.style.opacity = '0.45'; 
     }
 
     btnMenu.addEventListener('click', () => {
       clearIdleAnims();
-      if (isInventoryOpen) toggleInventory();
-      else toggleMenu();
+      if (isInventoryOpen) toggleInventory(); else toggleMenu();
     });
 
     btnA.addEventListener('click', () => {
-      clearIdleAnims();
-      sound.beep();
+      clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('A'); return; }
       if (isInventoryOpen) {
         if (invItems.length > 0) {
-          const itemId = invItems[invIndex];
-          ITEM_DB[itemId].use();
-          pet.inventory[itemId]--;
-          gainXp(25);
-          showReaction(`Used ${ITEM_DB[itemId].name}!`);
-          setLog(`Jimothy consumed ${ITEM_DB[itemId].name}.`);
-          renderInventory();
-          updateHUD();
-        } else {
-          sound.thud();
-        }
+          const itemId = invItems[invIndex]; ITEM_DB[itemId].use(); pet.inventory[itemId]--; gainXp(25);
+          showReaction(`Used ${ITEM_DB[itemId].name}!`); setLog(`Jimothy consumed ${ITEM_DB[itemId].name}.`); renderInventory(); updateHUD();
+        } else sound.thud();
         return;
       }
-      if (isMenuOpen) {
-        executeMenuOption();
-        return;
-      }
-      if (pet.inMiniGame) {
-        miniGameHandleButton('A');
-        return;
-      }
-      if (pet.inHeistGame) {
-        heistHandleButton('A');
-        return;
-      }
+      if (isMenuOpen) { executeMenuOption(); return; }
+      if (pet.inMiniGame) { miniGameHandleButton('A'); return; }
+      if (pet.inHeistGame) { heistHandleButton('A'); return; }
       if (pet.isSleeping) return;
-      const food = TRASH_MENU[currentFoodIdx];
-      currentFoodIdx = (currentFoodIdx + 1) % TRASH_MENU.length;
+      const food = TRASH_MENU[currentFoodIdx]; currentFoodIdx = (currentFoodIdx + 1) % TRASH_MENU.length;
       if (food.isGross) {
-        elements.graphic.classList.remove('idle-anim');
-        elements.graphic.classList.add('shake-anim');
+        elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('shake-anim');
         setTimeout(() => { elements.graphic.classList.remove('shake-anim'); elements.graphic.classList.add('idle-anim'); }, 700);
-        showReaction("🤮 GROSS!");
-        sound.hiss();
-        gainXp(5);
+        showReaction("🤮 GROSS!"); sound.hiss(); gainXp(5);
       } else {
-        if (food.hunger > 30) sound.trill(); 
-        else sound.munch();
-        showReaction(`*NOM* ${food.name}!`);
-        gainXp(15 + food.hunger);
+        if (food.hunger > 30) sound.trill(); else sound.munch();
+        showReaction(`*NOM* ${food.name}!`); gainXp(15 + food.hunger);
       }
-      pet.hunger += food.hunger; pet.chaos += food.chaos; pet.grease += food.grease;
-      setLog(food.desc);
-      updateHUD();
+      pet.hunger += food.hunger; pet.chaos += food.chaos; pet.grease += food.grease; setLog(food.desc); updateHUD();
     });
 
     btnB.addEventListener('click', () => {
-      clearIdleAnims();
-      sound.beep();
+      clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('B'); return; }
-      if (isInventoryOpen) {
-         toggleInventory();
-         return;
-      }
-      if (isMenuOpen) {
-        toggleMenu(); 
-        return;
-      }
-      if (pet.inMiniGame) {
-        miniGameHandleButton('B');
-        return;
-      }
-      if (pet.inHeistGame) {
-        heistHandleButton('B');
-        return;
-      }
+      if (isInventoryOpen) { toggleInventory(); return; }
+      if (isMenuOpen) { toggleMenu(); return; }
+      if (pet.inMiniGame) { miniGameHandleButton('B'); return; }
+      if (pet.inHeistGame) { heistHandleButton('B'); return; }
       initMiniGame();
     });
 
     btnSelect.addEventListener('click', () => { 
-      clearIdleAnims();
-      sound.beep(); 
+      clearIdleAnims(); sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
       if (pet.inMiniGame || pet.inHeistGame) return;
       toggleNap(); 
     });
     
     btnStart.addEventListener('click', () => {
-      clearIdleAnims();
-      sound.beep();
+      clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
       if (pet.inMiniGame || pet.inHeistGame) return;
-      sound.scuttle();
-      if (pet.isSleeping) return;
-      pet.grease = Math.min(100, pet.grease + 25);
-      gainXp(15);
-      showReaction("✨ Fresh Grime!");
-      setLog("Coated Jimothy in warm, linty goodness.");
-      updateHUD();
+      sound.scuttle(); if (pet.isSleeping) return;
+      pet.grease = Math.min(100, pet.grease + 25); gainXp(15);
+      showReaction("✨ Fresh Grime!"); setLog("Coated Jimothy in warm, linty goodness."); updateHUD();
     });
 
     const pokeAction = () => {
-       haptic(25);
-       clearIdleAnims();
+       haptic(25); clearIdleAnims();
        if (pet.isSleeping || isMenuOpen || isInventoryOpen) return;
-       
        const pokeEvents = [
-         { sfx: 'yip', msg: "🐾 *YIP!*", log: "You poked Jimothy.", chaos: 2 },
-         { sfx: 'grumble', msg: "💢 *GRUMBLE*", log: "Jimothy growled at your finger.", chaos: 5 },
-         { sfx: 'trill', msg: "✨ *TRILL*", log: "Jimothy purred happily.", chaos: -2 },
-         { sfx: 'hiss', msg: "🤬 *HISS*", log: "Jimothy hated that.", chaos: 8 },
-         { sfx: 'scuttle', msg: "🏃 *SCUTTLE*", log: "Jimothy dodged your finger.", chaos: 0 }
+         { sfx: 'yip', msg: "🐾 *YIP!*", log: "You poked Jimothy.", chaos: 2 }, { sfx: 'grumble', msg: "💢 *GRUMBLE*", log: "Jimothy growled at your finger.", chaos: 5 },
+         { sfx: 'trill', msg: "✨ *TRILL*", log: "Jimothy purred happily.", chaos: -2 }, { sfx: 'hiss', msg: "🤬 *HISS*", log: "Jimothy hated that.", chaos: 8 }, { sfx: 'scuttle', msg: "🏃 *SCUTTLE*", log: "Jimothy dodged your finger.", chaos: 0 }
        ];
        const ev = pokeEvents[Math.floor(Math.random() * pokeEvents.length)];
-       
        if (ev.sfx === 'hiss') {
-           elements.graphic.classList.remove('idle-anim');
-           elements.graphic.classList.add('shake-anim');
+           elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('shake-anim');
            setTimeout(() => { elements.graphic.classList.remove('shake-anim'); if(!pet.isSleeping) elements.graphic.classList.add('idle-anim'); }, 700);
        }
-       
-       sound[ev.sfx]();
-       pet.chaos += ev.chaos;
-       showReaction(ev.msg); setLog(ev.log);
-       updateHUD();
+       sound[ev.sfx](); pet.chaos += ev.chaos; showReaction(ev.msg); setLog(ev.log); updateHUD();
     };
     
     document.getElementById('dpadUp').addEventListener('click', () => {
@@ -2199,39 +1802,13 @@
       else pokeAction();
     });
 
-    document.getElementById('deviceToggleBtn').addEventListener('click', () => {
-      sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000);
-    });
-    document.getElementById('colorToggleBtn').addEventListener('click', () => {
-      sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000);
-    });
-    document.getElementById('lcdToggleBtn').addEventListener('click', () => {
-      sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000);
-    });
-    
-    document.getElementById('notifToggleBtn').addEventListener('click', async (e) => {
-      sound.beep();
-      const isEnabled = await notifier.toggle();
-      e.target.textContent = isEnabled ? '🔔' : '🔕';
-      showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500);
-    });
+    document.getElementById('deviceToggleBtn').addEventListener('click', () => { sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000); });
+    document.getElementById('colorToggleBtn').addEventListener('click', () => { sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000); });
+    document.getElementById('lcdToggleBtn').addEventListener('click', () => { sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000); });
+    document.getElementById('notifToggleBtn').addEventListener('click', async (e) => { sound.beep(); const isEnabled = await notifier.toggle(); e.target.textContent = isEnabled ? '🔔' : '🔕'; showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500); });
+    document.getElementById('hapticToggleBtn').addEventListener('click', (e) => { sound.beep(); prefs.hapticsEnabled = !prefs.hapticsEnabled; e.target.textContent = prefs.hapticsEnabled ? '📳' : '📴'; applyPrefs(); showReaction(prefs.hapticsEnabled ? "📳 Haptics ON" : "📴 Haptics OFF", 1500); if (prefs.hapticsEnabled) haptic([30, 30, 30]); });
+    document.getElementById('soundToggleBtn').addEventListener('click', (e) => { const isMuted = sound.toggleMute(); e.target.textContent = isMuted ? '🔇' : '🔊'; if (!isMuted) sound.beep(); });
 
-    document.getElementById('hapticToggleBtn').addEventListener('click', (e) => {
-      sound.beep();
-      prefs.hapticsEnabled = !prefs.hapticsEnabled;
-      e.target.textContent = prefs.hapticsEnabled ? '📳' : '📴';
-      applyPrefs();
-      showReaction(prefs.hapticsEnabled ? "📳 Haptics ON" : "📴 Haptics OFF", 1500);
-      if (prefs.hapticsEnabled) haptic([30, 30, 30]);
-    });
-
-    document.getElementById('soundToggleBtn').addEventListener('click', (e) => {
-      const isMuted = sound.toggleMute();
-      e.target.textContent = isMuted ? '🔇' : '🔊';
-      if (!isMuted) sound.beep();
-    });
-
-    // Keyboard bindings
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
       if (e.key === 'ArrowUp') document.getElementById('dpadUp').click();
@@ -2242,22 +1819,13 @@
       if (e.key.toLowerCase() === 'b' || e.key === '2') btnB.click();
     });
 
-    loadPrefs();
-    loadState();
-    updateHUD();
+    loadPrefs(); loadState(); updateHUD();
     
     if (pet.isSleeping) {
-       elements.graphic.classList.remove('idle-anim');
-       elements.eyes.style.display = 'none';
-       elements.sleepZzz.style.display = 'block';
+       elements.graphic.classList.remove('idle-anim'); elements.eyes.style.display = 'none'; elements.sleepZzz.style.display = 'block';
        const dreamBubble = document.getElementById('dreamBubble');
-       if (dreamBubble) {
-         dreamBubble.classList.remove('hidden');
-         dreamBubble.classList.add('flex');
-       }
-       cycleDreams();
-       dreamInterval = setInterval(cycleDreams, 3500);
-       setLog("Jimothy is fast asleep.");
+       if (dreamBubble) { dreamBubble.classList.remove('hidden'); dreamBubble.classList.add('flex'); }
+       cycleDreams(); dreamInterval = setInterval(cycleDreams, 3500); setLog("Jimothy is fast asleep.");
     } else {
        setLog("Jimothy emerged from the recycling bin.");
     }
