@@ -1778,6 +1778,7 @@
 
     // D-Pad Mapping (Poke mechanic or Menu Navigation)
     const pokeAction = () => {
+       haptic(25);
        clearIdleAnims();
        if (pet.isSleeping || isMenuOpen || isInventoryOpen) return;
        
@@ -1803,23 +1804,27 @@
     };
     
     document.getElementById('dpadUp').addEventListener('click', () => {
+      haptic(15);
       if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 4); renderInventory(); }
       else if (isMenuOpen) { sound.beep(); menuIndex = Math.max(0, menuIndex - 1); renderMenu(); } 
       else pokeAction();
     });
     
     document.getElementById('dpadDown').addEventListener('click', () => {
+      haptic(15);
       if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 4); renderInventory(); }
       else if (isMenuOpen) { sound.beep(); menuIndex = Math.min(MENU_OPTIONS.length - 1, menuIndex + 1); renderMenu(); } 
       else pokeAction();
     });
     
     document.getElementById('dpadLeft').addEventListener('click', () => {
+      haptic(15);
       if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 1); renderInventory(); }
       else pokeAction();
     });
 
     document.getElementById('dpadRight').addEventListener('click', () => {
+      haptic(15);
       if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 1); renderInventory(); }
       else pokeAction();
     });
