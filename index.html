@@ -48,13 +48,18 @@
       -webkit-user-select: none;
       touch-action: manipulation;
       margin: 0;
-      overflow: hidden; /* Prevent scrolling, especially important for AR */
+      /* Notice: overflow: hidden is REMOVED from here to allow normal scrolling */
     }
 
-    /* Important: Hide the main UI when in AR mode */
+    /* Important: Hide the main UI and lock scrolling ONLY when in AR mode */
+    body.ar-active {
+      overflow: hidden !important;
+    }
+    
     body.ar-active .toy-shell-container {
       display: none !important;
     }
+    
     /* Style the AR Button injected by Three.js */
     #ARButton {
       z-index: 9999; /* Ensure it's above everything */
@@ -582,14 +587,14 @@
       const arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
       document.body.appendChild(arBtn);
       
-      // Listen for AR session start/end to toggle UI visibility
+      // Listen for AR session start/end to toggle UI visibility and CSS classes
       arRenderer.xr.addEventListener('sessionstart', () => {
           isARMode = true;
-          document.body.classList.add('ar-active');
+          document.body.classList.add('ar-active'); // Triggers the correct overflow lock
       });
       arRenderer.xr.addEventListener('sessionend', () => {
           isARMode = false;
-          document.body.classList.remove('ar-active');
+          document.body.classList.remove('ar-active'); // Restores normal scrolling
       });
 
       if (AR_MODEL_URL) {
