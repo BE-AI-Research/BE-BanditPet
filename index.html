@@ -183,6 +183,7 @@
         <button id="colorToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Shell Color">🎨</button>
         <button id="lcdToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Screen Backlight">💡</button>
         <button id="webhookToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Set Webhook">💬</button>
+        <button id="hapticToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Toggle Haptics">📳</button>
         <button id="notifToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Toggle Notifications">🔕</button>
         <button id="soundToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Toggle Sound">🔊</button>
       </div>
@@ -664,8 +665,14 @@
       { name: 'Paper', bg: '#e5e7eb', pixel: '#111827', ghost: '#d1d5db', ui: 'rgba(17, 24, 39, 0.2)' }
     ];
 
-    let prefs = { shapeIdx: 0, themeIdx: 0, lcdIdx: 0 };
+    let prefs = { shapeIdx: 0, themeIdx: 0, lcdIdx: 0, hapticsEnabled: true };
     const PREFS_KEY = 'jimothy_theme_prefs';
+
+    function haptic(pattern) {
+      if (prefs.hapticsEnabled && 'vibrate' in navigator) {
+        try { navigator.vibrate(pattern); } catch(e) {}
+      }
+    }
 
     function applyPrefs() {
       const root = document.documentElement;
@@ -694,6 +701,10 @@
          const stored = localStorage.getItem(PREFS_KEY);
          if (stored) prefs = { ...prefs, ...JSON.parse(stored) };
        } catch(e) {}
+       
+       const hapticBtn = document.getElementById('hapticToggleBtn');
+       if (hapticBtn) hapticBtn.textContent = prefs.hapticsEnabled ? '📳' : '📴';
+       
        applyPrefs();
     }
 
@@ -1844,6 +1855,15 @@
       const isEnabled = await notifier.toggle();
       e.target.textContent = isEnabled ? '🔔' : '🔕';
       showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500);
+    });
+
+    document.getElementById('hapticToggleBtn').addEventListener('click', (e) => {
+      sound.beep();
+      prefs.hapticsEnabled = !prefs.hapticsEnabled;
+      e.target.textContent = prefs.hapticsEnabled ? '📳' : '📴';
+      applyPrefs();
+      showReaction(prefs.hapticsEnabled ? "📳 Haptics ON" : "📴 Haptics OFF", 1500);
+      if (prefs.hapticsEnabled) haptic([30, 30, 30]);
     });
 
     document.getElementById('soundToggleBtn').addEventListener('click', (e) => {
