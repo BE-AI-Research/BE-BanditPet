@@ -1605,6 +1605,70 @@
       if (e.key.toLowerCase() === 'a' || e.key === '1') btnA.click(); if (e.key.toLowerCase() === 'b' || e.key === '2') btnB.click();
     });
 
+    // === Gamepad Support API Integration ===
+    let gamepadState = {};
+
+    function pollGamepads() {
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+      for (let i = 0; i < gamepads.length; i++) {
+        const gp = gamepads[i];
+        if (gp) {
+          if (!gamepadState[gp.index]) gamepadState[gp.index] = { buttons: {} };
+          const prev = gamepadState[gp.index].buttons;
+
+          // Standard Gamepad mapping overlay to UI buttons
+          const map = [
+            { id: 0, el: btnA }, // A/Cross
+            { id: 1, el: btnB }, // B/Circle
+            { id: 2, el: btnA }, // X/Square
+            { id: 3, el: btnB }, // Y/Triangle
+            { id: 8, el: btnSelect }, // Select
+            { id: 9, el: btnStart }, // Start
+            { id: 12, el: document.getElementById('dpadUp') },
+            { id: 13, el: document.getElementById('dpadDown') },
+            { id: 14, el: document.getElementById('dpadLeft') },
+            { id: 15, el: document.getElementById('dpadRight') }
+          ];
+
+          map.forEach(m => {
+            const pressed = gp.buttons[m.id] && gp.buttons[m.id].pressed;
+            // Only fire click event on button press down, not while held
+            if (pressed && !prev[m.id]) { if (m.el) m.el.click(); }
+            prev[m.id] = pressed;
+          });
+
+          // Analog stick support mapped to D-Pad (Left stick)
+          const threshold = 0.5;
+          const axes = {
+            up: gp.axes[1] < -threshold,
+            down: gp.axes[1] > threshold,
+            left: gp.axes[0] < -threshold,
+            right: gp.axes[0] > threshold
+          };
+
+          if (axes.up && !prev['ax_up']) document.getElementById('dpadUp').click(); prev['ax_up'] = axes.up;
+          if (axes.down && !prev['ax_dn']) document.getElementById('dpadDown').click(); prev['ax_dn'] = axes.down;
+          if (axes.left && !prev['ax_l']) document.getElementById('dpadLeft').click(); prev['ax_l'] = axes.left;
+          if (axes.right && !prev['ax_r']) document.getElementById('dpadRight').click(); prev['ax_r'] = axes.right;
+        }
+      }
+      requestAnimationFrame(pollGamepads);
+    }
+
+    window.addEventListener("gamepadconnected", (e) => {
+      setLog(`🎮 Gamepad connected: ${e.gamepad.id}`);
+      showReaction("🎮 CONTROLLER!");
+      sound.fanfare();
+    });
+    
+    window.addEventListener("gamepaddisconnected", (e) => {
+      setLog(`🎮 Gamepad disconnected.`);
+      delete gamepadState[e.gamepad.index];
+    });
+
+    pollGamepads(); // Initiate the zero-latency polling loop
+    // ======================================
+
     loadPrefs(); loadState(); updateHUD();
     
     if (pet.isSleeping) {
