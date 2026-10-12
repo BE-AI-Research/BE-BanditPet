@@ -451,6 +451,13 @@
     let arPalaceGroup; 
     const trashPieces = [];
     
+    // NEW: AR Animation State Variables
+    const clock = new THREE.Clock();
+    let jimothyState = 'idle'; // 'idle', 'seeking', 'carrying'
+    let trashQueue = [];
+    let currentTargetTrash = null;
+    let trashFinalPos = new THREE.Vector3();
+    
     const trashGeometries = [
         new THREE.BoxGeometry(0.1, 0.1, 0.1), 
         new THREE.CylinderGeometry(0.04, 0.04, 0.12, 16), 
@@ -515,10 +522,13 @@
               hitTestSourceRequested = false;
               hitTestSource = null;
               jimothyPlaced = false;
+              jimothyState = 'idle';
               
               arPalaceGroup.visible = false;
               trashPieces.forEach(p => arPalaceGroup.remove(p));
+              trashQueue.forEach(p => arPalaceGroup.remove(p));
               trashPieces.length = 0;
+              trashQueue = [];
               if (arModel) arModel.visible = false;
           });
           
@@ -602,7 +612,7 @@
                 
                 haptic([50, 50, 100]);
                 sound.fanfare();
-                setLog("Jimothy placed! Tap to build his palace.");
+                setLog("Jimothy placed! Tap to spawn trash for his palace.");
                 showReaction("MY DOMAIN!");
                 loadARPalace();
             } else {
@@ -616,12 +626,13 @@
                     updateHUD();
                     if(typeof drawTrashPalace === 'function') drawTrashPalace(); 
                 }
-                setLog("Jimothy summoned a piece of his Trash Palace!");
-                showReaction("MORE TRASH!");
+                setLog("Spawned trash! Jimothy will fetch it.");
+                showReaction("MINE!");
             }
         }
     }
 
+    // NEW: Spawns trash into the queue instead of instantly building
     function spawnTrashPiece(worldMatrix) {
         const geoIdx = Math.floor(Math.random() * trashGeometries.length);
         const matIdx = Math.floor(Math.random() * trashMaterials.length);
@@ -633,16 +644,12 @@
         
         mesh.rotation.y = Math.random() * Math.PI * 2;
         mesh.rotation.z = (Math.random() - 0.5) * 0.3;
-        mesh.position.y += (Math.random() * 0.1); 
-        mesh.position.x += (Math.random() - 0.5) * 0.15;
-        mesh.position.z += (Math.random() - 0.5) * 0.15;
-
+        
         const scaleMod = 0.8 + (Math.random() * 0.4);
         mesh.scale.set(scaleMod, scaleMod, scaleMod);
 
         arPalaceGroup.add(mesh);
-        trashPieces.push(mesh);
-        saveARPalace();
+        trashQueue.push(mesh);
     }
 
     function createProceduralRaccoon() {
@@ -688,6 +695,7 @@
       }
     }
 
+    // NEW: Render loop includes Jimothy's collection & building AI
     function renderAR(timestamp, frame) {
       if (arRenderer && arScene && arCamera) {
           if (frame && arRenderer.xr.enabled) {
@@ -715,9 +723,70 @@
           }
 
           if (arModel && isARMode && jimothyPlaced) {
+              const dt = clock.getDelta();
               const time = performance.now() * 0.001;
-              arModel.position.y = 0.015 + Math.sin(time * 2) * 0.015;
-              arModel.rotation.z = Math.sin(time) * 0.05; 
+
+              if (jimothyState === 'idle') {
+                  // Gentle idle bob
+                  arModel.position.y = 0.015 + Math.sin(time * 2) * 0.015;
+                  arModel.rotation.z = Math.sin(time) * 0.05; 
+                  
+                  if (trashQueue.length > 0) {
+                      currentTargetTrash = trashQueue.shift();
+                      jimothyState = 'seeking';
+                      sound.scuttle();
+                  }
+              } else if (jimothyState === 'seeking') {
+                  // Move towards dropped trash
+                  const targetPos = currentTargetTrash.position.clone();
+                  targetPos.y = arModel.position.y; 
+                  arModel.lookAt(targetPos);
+                  
+                  const dir = new THREE.Vector3().subVectors(targetPos, arModel.position);
+                  const dist = dir.length();
+                  
+                  if (dist < 0.08) {
+                      jimothyState = 'carrying';
+                      // Calculate where this piece goes in the castle
+                      const idx = trashPieces.length;
+                      const yStack = Math.floor(idx / 4) * 0.08; 
+                      const radius = Math.random() * 0.12;
+                      const angle = Math.random() * Math.PI * 2;
+                      trashFinalPos.set(Math.cos(angle) * radius, yStack, Math.sin(angle) * radius);
+                      sound.yip(); 
+                  } else {
+                      dir.normalize();
+                      arModel.position.addScaledVector(dir, 0.4 * dt);
+                      arModel.position.y = 0.015 + Math.abs(Math.sin(time * 15)) * 0.03; // Run bounce
+                      arModel.rotation.z = Math.sin(time * 15) * 0.15; // Waddle
+                  }
+              } else if (jimothyState === 'carrying') {
+                  // Make trash follow Jimothy's mouth
+                  const carryOffset = new THREE.Vector3(0, 0.08, 0.08);
+                  carryOffset.applyQuaternion(arModel.quaternion);
+                  currentTargetTrash.position.copy(arModel.position).add(carryOffset);
+                  
+                  // Run back to castle center (0,0,0)
+                  const targetPos = new THREE.Vector3(0, arModel.position.y, 0);
+                  arModel.lookAt(targetPos);
+                  
+                  const dir = new THREE.Vector3().subVectors(targetPos, arModel.position);
+                  const dist = dir.length();
+                  
+                  if (dist < 0.12) {
+                      // Deposit item into castle stack
+                      currentTargetTrash.position.copy(trashFinalPos);
+                      trashPieces.push(currentTargetTrash);
+                      saveARPalace();
+                      jimothyState = 'idle';
+                      sound.thud();
+                  } else {
+                      dir.normalize();
+                      arModel.position.addScaledVector(dir, 0.4 * dt);
+                      arModel.position.y = 0.015 + Math.abs(Math.sin(time * 15)) * 0.03; // Run bounce
+                      arModel.rotation.z = Math.sin(time * 15) * 0.15; // Waddle
+                  }
+              }
           }
           arRenderer.render(arScene, arCamera);
       }
