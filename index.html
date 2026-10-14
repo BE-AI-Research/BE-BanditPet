@@ -28,8 +28,8 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
       }
     }
   </script>
@@ -186,6 +186,12 @@
        50% { transform: rotate(5deg); }
     }
 
+    @keyframes flickerLight {
+      0%, 100% { opacity: 0.1; }
+      50% { opacity: 0.25; }
+      52% { opacity: 0.05; }
+      54% { opacity: 0.2; }
+    }
     .flicker-anim { animation: flickerLight 6s infinite; }
 
     .pixelated {
@@ -267,10 +273,10 @@
 
           <div id="inventoryScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
             <div class="flex justify-between items-center text-[9px] sm:text-[10px] font-bold border-b pb-1 mb-1 shrink-0" style="border-color: var(--lcd-ui);">
-              <span>INVENTORY</span>
+              <span id="inventoryHeader">INVENTORY</span>
               <span class="animate-pulse opacity-70">B:EXIT</span>
             </div>
-            <div id="inventoryGrid" class="grid grid-cols-4 gap-1.5 flex-1 content-start overflow-y-auto"></div>
+            <div id="inventoryGrid" class="grid grid-cols-4 gap-1.5 flex-1 content-start overflow-y-auto pr-0.5"></div>
             <div id="inventoryDesc" class="h-8 mt-1 text-[7px] sm:text-[8px] font-mono border-t pt-1 shrink-0 leading-tight" style="border-color: var(--lcd-ui);">
               BAG IS EMPTY
             </div>
@@ -508,106 +514,251 @@
     let jimothyPlaced = false;
     
     let arPalaceGroup; 
-    const trashPieces = [];
-    
-    const trashGeometries = [
-        new THREE.BoxGeometry(0.1, 0.1, 0.1),
-        new THREE.CylinderGeometry(0.04, 0.04, 0.12, 16),
-        new THREE.BoxGeometry(0.15, 0.05, 0.1)
-    ];
-    const trashMaterials = [
-        new THREE.MeshStandardMaterial({ color: 0x8b5a2b }),
-        new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.2 }),
-        new THREE.MeshStandardMaterial({ color: 0xee0000 }),
-        new THREE.MeshStandardMaterial({ color: 0x228b22 })
-    ];
+    const trashPieces = []; // Stacked palace pieces
+    const uncollectedTrash = []; // Loose trash waiting for Jimothy AI to pick up
 
-    function initAR() {
-      const arContainer = document.getElementById('ar-container');
-      arScene = new THREE.Scene();
-      
-      arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    // Autonomous AI Controller State for 3D Jimothy
+    const arAI = {
+      state: 'IDLE', // 'IDLE', 'WANDER', 'SEEK_TRASH', 'CARRY_TO_PALACE', 'CELEBRATE'
+      timer: 0,
+      targetPos: new THREE.Vector3(),
+      targetTrash: null,
+      carriedTrash: null,
+      walkCycle: 0,
+      speed: 0.42,
+      palaceCenter: new THREE.Vector3(0, 0, -0.25),
+      lastTime: 0
+    };
 
-      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-      light.position.set(0.5, 1, 0.25);
-      arScene.add(light);
-      
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(1, 2, 1);
-      arScene.add(directionalLight);
+    const AR_TRASH_TYPES = ['pizza_box', 'soda_can', 'crt_tv', 'traffic_cone', 'tire', 'milk_crate'];
 
-      arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      arRenderer.setPixelRatio(window.devicePixelRatio);
-      arRenderer.setSize(window.innerWidth, window.innerHeight);
-      arRenderer.xr.enabled = true;
-      arContainer.appendChild(arRenderer.domElement);
+    function createDetailedTrashMesh(type) {
+      const group = new THREE.Group();
+      group.userData.trashType = type;
 
-      const arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
-      document.body.appendChild(arBtn);
-
-      arController = arRenderer.xr.getController(0);
-      arController.addEventListener('select', onSelect);
-      arScene.add(arController);
-
-      reticle = new THREE.Mesh(
-          new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-          new THREE.MeshBasicMaterial({ color: 0x6ee7b7 })
-      );
-      reticle.matrixAutoUpdate = false;
-      reticle.visible = false;
-      arScene.add(reticle);
-
-      arPalaceGroup = new THREE.Group();
-      arPalaceGroup.visible = false;
-      arScene.add(arPalaceGroup);
-      
-      arRenderer.xr.addEventListener('sessionstart', () => {
-          isARMode = true;
-          document.body.classList.add('ar-active');
-          hitTestSourceRequested = false;
-          hitTestSource = null;
-          jimothyPlaced = false;
-          
-          arPalaceGroup.visible = false;
-          trashPieces.forEach(p => arPalaceGroup.remove(p));
-          trashPieces.length = 0;
-          if (arModel) arModel.visible = false;
-      });
-      
-      arRenderer.xr.addEventListener('sessionend', () => {
-          isARMode = false;
-          document.body.classList.remove('ar-active');
-          reticle.visible = false;
-          arPalaceGroup.visible = false;
-      });
-
-      if (AR_MODEL_URL) {
-         const loader = new GLTFLoader();
-         loader.load(
-            AR_MODEL_URL,
-            function (gltf) {
-               arModel = gltf.scene;
-               arModel.scale.set(0.1, 0.1, 0.1);
-               arModel.visible = false;
-               arScene.add(arModel);
-            },
-            undefined,
-            function (error) {
-               createProceduralRaccoon();
-            }
-         );
+      if (type === 'pizza_box') {
+        const box = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 0.03, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.85 })
+        );
+        box.position.y = 0.015;
+        const stain = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.05, 0.05, 0.032, 12),
+          new THREE.MeshStandardMaterial({ color: 0xb22222, roughness: 0.6 })
+        );
+        stain.position.set(0.02, 0.015, -0.01);
+        const crust = new THREE.Mesh(
+          new THREE.TorusGeometry(0.035, 0.008, 6, 12, Math.PI * 0.8),
+          new THREE.MeshStandardMaterial({ color: 0xcd853f })
+        );
+        crust.rotation.x = Math.PI / 2;
+        crust.position.set(-0.02, 0.032, 0.02);
+        group.add(box, stain, crust);
+        group.userData.height = 0.03;
+      } else if (type === 'soda_can') {
+        const body = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.035, 0.035, 0.1, 14),
+          new THREE.MeshStandardMaterial({ color: 0xe61919, metalness: 0.6, roughness: 0.3 })
+        );
+        body.position.y = 0.05;
+        const rimTop = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.033, 0.035, 0.01, 14),
+          new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 })
+        );
+        rimTop.position.y = 0.1;
+        const stripe = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.0355, 0.0355, 0.02, 14),
+          new THREE.MeshStandardMaterial({ color: 0xffffff })
+        );
+        stripe.position.y = 0.055;
+        group.add(body, rimTop, stripe);
+        group.userData.height = 0.1;
+      } else if (type === 'crt_tv') {
+        const casing = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.14, 0.14),
+          new THREE.MeshStandardMaterial({ color: 0x3a3a3c, roughness: 0.7 })
+        );
+        casing.position.y = 0.07;
+        const screen = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.09, 0.01),
+          new THREE.MeshStandardMaterial({ color: 0x1e352f, metalness: 0.8, roughness: 0.1, emissive: 0x0a1f17 })
+        );
+        screen.position.set(-0.01, 0.07, 0.07);
+        const antGeo = new THREE.CylinderGeometry(0.002, 0.002, 0.1, 6);
+        const antMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9 });
+        const antL = new THREE.Mesh(antGeo, antMat);
+        antL.position.set(-0.03, 0.17, 0);
+        antL.rotation.z = 0.4;
+        const antR = new THREE.Mesh(antGeo, antMat);
+        antR.position.set(0.03, 0.17, 0);
+        antR.rotation.z = -0.4;
+        group.add(casing, screen, antL, antR);
+        group.userData.height = 0.14;
+      } else if (type === 'traffic_cone') {
+        const base = new THREE.Mesh(
+          new THREE.BoxGeometry(0.13, 0.018, 0.13),
+          new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 })
+        );
+        base.position.y = 0.009;
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(0.05, 0.15, 14),
+          new THREE.MeshStandardMaterial({ color: 0xff5500, roughness: 0.4 })
+        );
+        cone.position.y = 0.085;
+        const collar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.025, 0.035, 0.03, 14),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x222222 })
+        );
+        collar.position.y = 0.1;
+        group.add(base, cone, collar);
+        group.userData.height = 0.16;
+      } else if (type === 'tire') {
+        const torus = new THREE.Mesh(
+          new THREE.TorusGeometry(0.07, 0.03, 10, 18),
+          new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.9 })
+        );
+        torus.rotation.x = Math.PI / 2;
+        torus.position.y = 0.03;
+        const hub = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.045, 0.045, 0.02, 12),
+          new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.7, roughness: 0.3 })
+        );
+        hub.position.y = 0.03;
+        group.add(torus, hub);
+        group.userData.height = 0.06;
       } else {
-         createProceduralRaccoon();
+        // milk_crate
+        const crate = new THREE.Mesh(
+          new THREE.BoxGeometry(0.14, 0.12, 0.14),
+          new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.5 })
+        );
+        crate.position.y = 0.06;
+        const inner = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.11, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 })
+        );
+        inner.position.y = 0.07;
+        group.add(crate, inner);
+        group.userData.height = 0.12;
       }
 
-      window.addEventListener('resize', onWindowResize, false);
-      arRenderer.setAnimationLoop(renderAR);
+      return group;
+    }
+
+    function computeNextPalaceSlot(index, pieceHeight) {
+      // Builds a multi-tiered architectural Trash Fortress around arAI.palaceCenter
+      const tierCapacity = 6;
+      const tier = Math.floor(index / tierCapacity);
+      const slotInTier = index % tierCapacity;
+      const radius = Math.max(0.04, 0.18 - tier * 0.035);
+      const angle = (slotInTier / tierCapacity) * Math.PI * 2 + (tier * 0.5);
+
+      const x = arAI.palaceCenter.x + Math.cos(angle) * radius;
+      const z = arAI.palaceCenter.z + Math.sin(angle) * radius;
+      const y = tier * 0.1 + (slotInTier % 2) * 0.015;
+
+      return {
+        pos: new THREE.Vector3(x, y, z),
+        rotY: angle + Math.PI / 2 + (Math.random() - 0.5) * 0.4
+      };
+    }
+
+    function initAR() {
+      try {
+        const arContainer = document.getElementById('ar-container');
+        arScene = new THREE.Scene();
+        
+        arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+        light.position.set(0.5, 1, 0.25);
+        arScene.add(light);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 2, 1);
+        arScene.add(directionalLight);
+
+        arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        arRenderer.setPixelRatio(window.devicePixelRatio);
+        arRenderer.setSize(window.innerWidth, window.innerHeight);
+        arRenderer.xr.enabled = true;
+        arContainer.appendChild(arRenderer.domElement);
+
+        const arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
+        document.body.appendChild(arBtn);
+
+        arController = arRenderer.xr.getController(0);
+        arController.addEventListener('select', onSelect);
+        arScene.add(arController);
+
+        reticle = new THREE.Mesh(
+            new THREE.RingGeometry(0.12, 0.16, 32).rotateX(-Math.PI / 2),
+            new THREE.MeshBasicMaterial({ color: 0x6ee7b7 })
+        );
+        reticle.matrixAutoUpdate = false;
+        reticle.visible = false;
+        arScene.add(reticle);
+
+        arPalaceGroup = new THREE.Group();
+        arPalaceGroup.visible = false;
+        arScene.add(arPalaceGroup);
+        
+        arRenderer.xr.addEventListener('sessionstart', () => {
+            isARMode = true;
+            document.body.classList.add('ar-active');
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+            jimothyPlaced = false;
+            
+            arPalaceGroup.visible = false;
+            trashPieces.forEach(p => arPalaceGroup.remove(p));
+            trashPieces.length = 0;
+            uncollectedTrash.forEach(p => arPalaceGroup.remove(p));
+            uncollectedTrash.length = 0;
+
+            arAI.state = 'IDLE';
+            arAI.targetTrash = null;
+            arAI.carriedTrash = null;
+            arAI.lastTime = performance.now();
+            if (arModel) arModel.visible = false;
+        });
+        
+        arRenderer.xr.addEventListener('sessionend', () => {
+            isARMode = false;
+            document.body.classList.remove('ar-active');
+            reticle.visible = false;
+            arPalaceGroup.visible = false;
+        });
+
+        if (AR_MODEL_URL) {
+           const loader = new GLTFLoader();
+           loader.load(
+              AR_MODEL_URL,
+              function (gltf) {
+                 arModel = gltf.scene;
+                 arModel.scale.set(0.1, 0.1, 0.1);
+                 arModel.visible = false;
+                 arScene.add(arModel);
+              },
+              undefined,
+              function (error) {
+                 createProceduralRaccoon();
+              }
+           );
+        } else {
+           createProceduralRaccoon();
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+        arRenderer.setAnimationLoop(renderAR);
+      } catch (e) {
+        console.warn("WebXR / AR initialization skipped:", e);
+      }
     }
 
     function saveARPalace() {
         const data = trashPieces.map(mesh => ({
-            geoIdx: mesh.userData.geoIdx,
-            matIdx: mesh.userData.matIdx,
+            trashType: mesh.userData.trashType || 'milk_crate',
             px: mesh.position.x, py: mesh.position.y, pz: mesh.position.z,
             rx: mesh.rotation.x, ry: mesh.rotation.y, rz: mesh.rotation.z
         }));
@@ -620,16 +771,12 @@
         try {
             const data = JSON.parse(saved);
             data.forEach(item => {
-                const geo = trashGeometries[item.geoIdx];
-                const mat = trashMaterials[item.matIdx];
-                if (geo && mat) {
-                    const mesh = new THREE.Mesh(geo, mat);
-                    mesh.userData = { geoIdx: item.geoIdx, matIdx: item.matIdx };
-                    mesh.position.set(item.px, item.py, item.pz);
-                    mesh.rotation.set(item.rx, item.ry, item.rz);
-                    arPalaceGroup.add(mesh);
-                    trashPieces.push(mesh);
-                }
+                const type = item.trashType || AR_TRASH_TYPES[(item.geoIdx || 0) % AR_TRASH_TYPES.length];
+                const mesh = createDetailedTrashMesh(type);
+                mesh.position.set(item.px, item.py, item.pz);
+                mesh.rotation.set(item.rx, item.ry, item.rz);
+                arPalaceGroup.add(mesh);
+                trashPieces.push(mesh);
             });
             setLog(`Loaded ${data.length} saved palace pieces!`);
         } catch(e) {}
@@ -652,97 +799,272 @@
                 arPalaceGroup.visible = true;
                 arModel.visible = true;
                 jimothyPlaced = true;
+                arAI.state = 'IDLE';
+                arAI.timer = 1.0;
+                arAI.lastTime = performance.now();
                 
                 haptic([50, 50, 100]);
                 sound.fanfare();
-                setLog("Jimothy placed! Tap to build his palace.");
+                setLog("Jimothy placed! Tap anywhere to drop trash for him to build with.");
                 showReaction("MY DOMAIN!");
                 
                 loadARPalace();
             } else {
-                spawnTrashPiece(reticle.matrix);
+                dropTrashForJimothy(reticle.matrix);
                 haptic(30);
                 sound.thud();
-                
-                if(typeof pet !== 'undefined') {
-                    pet.trashCollected = (pet.trashCollected || 0) + 10;
-                    pet.chaos += 5;
-                    updateHUD();
-                    if(typeof drawTrashPalace === 'function') drawTrashPalace();
-                }
-                setLog("Jimothy summoned a piece of his Trash Palace!");
-                showReaction("MORE TRASH!");
+                setLog("Dropped trash! Jimothy is scurrying over to build...");
+                showReaction("OOOH TRASH!");
             }
         }
     }
 
-    function spawnTrashPiece(worldMatrix) {
-        const geoIdx = Math.floor(Math.random() * trashGeometries.length);
-        const matIdx = Math.floor(Math.random() * trashMaterials.length);
-        
-        const mesh = new THREE.Mesh(trashGeometries[geoIdx], trashMaterials[matIdx]);
-        mesh.userData = { geoIdx, matIdx };
+    function dropTrashForJimothy(worldMatrix) {
+        const type = AR_TRASH_TYPES[Math.floor(Math.random() * AR_TRASH_TYPES.length)];
+        const mesh = createDetailedTrashMesh(type);
 
         mesh.position.setFromMatrixPosition(worldMatrix);
         arPalaceGroup.worldToLocal(mesh.position);
-        
+        mesh.position.y = Math.max(0, mesh.position.y);
         mesh.rotation.y = Math.random() * Math.PI * 2;
-        mesh.rotation.z = (Math.random() - 0.5) * 0.3;
-        mesh.position.y += (Math.random() * 0.1); 
-        mesh.position.x += (Math.random() - 0.5) * 0.15;
-        mesh.position.z += (Math.random() - 0.5) * 0.15;
-
-        const scaleMod = 0.8 + (Math.random() * 0.4);
-        mesh.scale.set(scaleMod, scaleMod, scaleMod);
 
         arPalaceGroup.add(mesh);
-        trashPieces.push(mesh);
-        saveARPalace();
+        uncollectedTrash.push(mesh);
+
+        // Immediately alert Jimothy's AI if he is idle or wandering
+        if (arAI.state === 'IDLE' || arAI.state === 'WANDER') {
+            arAI.targetTrash = uncollectedTrash.shift();
+            arAI.state = 'SEEK_TRASH';
+            sound.scuttle();
+        }
     }
 
     function createProceduralRaccoon() {
       arModel = new THREE.Group();
-      const matBody = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
-      const matStripe = new THREE.MeshStandardMaterial({ color: 0x111111 });
-      const matBelly = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+      const matBody = new THREE.MeshStandardMaterial({ color: 0x52525b, roughness: 0.8 });
+      const matDark = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7 });
+      const matBelly = new THREE.MeshStandardMaterial({ color: 0xa1a1aa, roughness: 0.8 });
+      const matWhite = new THREE.MeshStandardMaterial({ color: 0xf4f4f5, roughness: 0.6 });
+      const matGold = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.7, roughness: 0.2 });
       
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.2), matBody);
-      body.position.y = 0.125;
+      // Torso
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.16), matBody);
+      body.position.y = 0.14;
       arModel.add(body);
       
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.02), matBelly);
-      belly.position.set(0, 0.1, 0.1);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.17, 0.02), matBelly);
+      belly.position.set(0, 0.13, 0.08);
       arModel.add(belly);
 
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.15, 0.18), matBody);
-      head.position.y = 0.32;
-      arModel.add(head);
+      // Head Group
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0, 0.31, 0.02);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.14, 0.15), matBody);
+      headGroup.add(head);
       
-      const mask = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.06, 0.19), matStripe);
-      mask.position.y = 0.33;
-      arModel.add(mask);
+      const mask = new THREE.Mesh(new THREE.BoxGeometry(0.175, 0.055, 0.155), matDark);
+      mask.position.y = 0.01;
+      headGroup.add(mask);
 
-      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.08), matBelly);
-      snout.position.set(0, 0.28, 0.1);
-      arModel.add(snout);
+      // Eyes
+      const eyeGeo = new THREE.BoxGeometry(0.028, 0.028, 0.01);
+      const pupilGeo = new THREE.BoxGeometry(0.014, 0.014, 0.012);
+      const eyeL = new THREE.Mesh(eyeGeo, matWhite); eyeL.position.set(-0.04, 0.012, 0.078);
+      const eyeR = new THREE.Mesh(eyeGeo, matWhite); eyeR.position.set(0.04, 0.012, 0.078);
+      const pupL = new THREE.Mesh(pupilGeo, matDark); pupL.position.set(-0.038, 0.012, 0.08);
+      const pupR = new THREE.Mesh(pupilGeo, matDark); pupR.position.set(0.038, 0.012, 0.08);
+      headGroup.add(eyeL, eyeR, pupL, pupR);
 
-      const earGeo = new THREE.ConeGeometry(0.04, 0.08, 4);
-      const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.06, 0.42, 0);
-      const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.06, 0.42, 0);
-      arModel.add(earL); arModel.add(earR);
+      // Snout & Nose
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.06), matBelly);
+      snout.position.set(0, -0.025, 0.09);
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.02, 0.02), matDark);
+      nose.position.set(0, -0.015, 0.12);
+      headGroup.add(snout, nose);
 
+      // Ears
+      const earGeo = new THREE.ConeGeometry(0.035, 0.07, 4);
+      const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.06, 0.1, 0);
+      const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.06, 0.1, 0);
+      headGroup.add(earL, earR);
+
+      // Optional Emperor Crown
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.04, 6), matGold);
+      crown.position.set(0, 0.09, 0);
+      crown.visible = (typeof pet !== 'undefined' && (pet.stage === 'emperor' || pet.stage === 'deity'));
+      headGroup.add(crown);
+      arModel.add(headGroup);
+
+      // Articulated Arms & Legs for Walking/Carrying
+      const armGeo = new THREE.BoxGeometry(0.045, 0.11, 0.045);
+      const armL = new THREE.Mesh(armGeo, matDark); armL.position.set(-0.11, 0.16, 0.04);
+      const armR = new THREE.Mesh(armGeo, matDark); armR.position.set(0.11, 0.16, 0.04);
+      arModel.add(armL, armR);
+
+      const legGeo = new THREE.BoxGeometry(0.055, 0.07, 0.065);
+      const legL = new THREE.Mesh(legGeo, matDark); legL.position.set(-0.055, 0.035, 0.01);
+      const legR = new THREE.Mesh(legGeo, matDark); legR.position.set(0.055, 0.035, 0.01);
+      arModel.add(legL, legR);
+
+      // Striped Tail
       const tailGroup = new THREE.Group();
-      const tailSeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.08), matBody);
-      const tailSeg2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.07), matStripe);
-      const tailSeg3 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), matBody);
-      tailSeg2.position.y = 0.09; tailSeg3.position.y = 0.16;
-      tailGroup.add(tailSeg1); tailGroup.add(tailSeg2); tailGroup.add(tailSeg3);
-      tailGroup.position.set(0, 0.05, -0.1);
-      tailGroup.rotation.x = -Math.PI / 4;
+      for (let i = 0; i < 4; i++) {
+        const seg = new THREE.Mesh(
+          new THREE.BoxGeometry(0.07 - i * 0.008, 0.06, 0.07 - i * 0.008),
+          i % 2 === 0 ? matBody : matDark
+        );
+        seg.position.y = i * 0.055;
+        tailGroup.add(seg);
+      }
+      tailGroup.position.set(0, 0.06, -0.09);
+      tailGroup.rotation.x = -Math.PI / 3;
       arModel.add(tailGroup);
 
+      arModel.userData.parts = { headGroup, armL, armR, legL, legR, tailGroup, crown };
       arModel.visible = false;
       arScene.add(arModel);
+    }
+
+    function updateJimothyARAI(dt, time) {
+      if (!arModel || !jimothyPlaced) return;
+      const parts = arModel.userData.parts;
+      if (parts && parts.crown && typeof pet !== 'undefined') {
+        parts.crown.visible = (pet.stage === 'emperor' || pet.stage === 'deity');
+      }
+
+      const moveTowards = (target, stopDist, speedMult = 1) => {
+        const dx = target.x - arModel.position.x;
+        const dz = target.z - arModel.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > stopDist) {
+          const step = Math.min(dist, arAI.speed * speedMult * dt);
+          arModel.position.x += (dx / dist) * step;
+          arModel.position.z += (dz / dist) * step;
+          arModel.rotation.y = Math.atan2(dx, dz);
+
+          // Scurry limb animation
+          arAI.walkCycle += dt * 18 * speedMult;
+          arModel.position.y = Math.abs(Math.sin(arAI.walkCycle)) * 0.025;
+          arModel.rotation.z = Math.sin(arAI.walkCycle * 0.5) * 0.08;
+          if (parts) {
+            parts.legL.rotation.x = Math.sin(arAI.walkCycle) * 0.6;
+            parts.legR.rotation.x = -Math.sin(arAI.walkCycle) * 0.6;
+            parts.tailGroup.rotation.z = Math.cos(arAI.walkCycle) * 0.25;
+            if (arAI.carriedTrash) {
+              parts.armL.rotation.x = -Math.PI / 2.2;
+              parts.armR.rotation.x = -Math.PI / 2.2;
+            } else {
+              parts.armL.rotation.x = -Math.sin(arAI.walkCycle) * 0.5;
+              parts.armR.rotation.x = Math.sin(arAI.walkCycle) * 0.5;
+            }
+          }
+          return false;
+        }
+        return true;
+      };
+
+      if (arAI.state === 'IDLE') {
+        arModel.position.y = 0.01 + Math.sin(time * 2.5) * 0.01;
+        arModel.rotation.z = Math.sin(time * 1.5) * 0.03;
+        if (parts) {
+          parts.armL.rotation.x = 0; parts.armR.rotation.x = 0;
+          parts.legL.rotation.x = 0; parts.legR.rotation.x = 0;
+          parts.tailGroup.rotation.z = Math.sin(time * 3) * 0.15;
+          parts.headGroup.rotation.y = Math.sin(time * 1.2) * 0.25;
+        }
+
+        if (uncollectedTrash.length > 0) {
+          arAI.targetTrash = uncollectedTrash.shift();
+          arAI.state = 'SEEK_TRASH';
+          sound.scuttle();
+        } else {
+          arAI.timer -= dt;
+          if (arAI.timer <= 0) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 0.12 + Math.random() * 0.25;
+            arAI.targetPos.set(
+              arAI.palaceCenter.x + Math.cos(angle) * radius,
+              0,
+              arAI.palaceCenter.z + Math.sin(angle) * radius
+            );
+            arAI.state = 'WANDER';
+          }
+        }
+      } else if (arAI.state === 'WANDER') {
+        if (uncollectedTrash.length > 0) {
+          arAI.targetTrash = uncollectedTrash.shift();
+          arAI.state = 'SEEK_TRASH';
+          sound.scuttle();
+          return;
+        }
+        const arrived = moveTowards(arAI.targetPos, 0.03, 0.65);
+        if (arrived) {
+          arAI.state = 'IDLE';
+          arAI.timer = 1.5 + Math.random() * 2.5;
+        }
+      } else if (arAI.state === 'SEEK_TRASH') {
+        if (!arAI.targetTrash) {
+          arAI.state = 'IDLE';
+          return;
+        }
+        const arrived = moveTowards(arAI.targetTrash.position, 0.06, 1.35);
+        if (arrived) {
+          // Pick up the trash object and hold it overhead
+          arAI.carriedTrash = arAI.targetTrash;
+          arAI.targetTrash = null;
+          arModel.add(arAI.carriedTrash);
+          arAI.carriedTrash.position.set(0, 0.38, 0.08);
+          arAI.carriedTrash.rotation.set(0, 0, 0);
+
+          const slot = computeNextPalaceSlot(trashPieces.length, arAI.carriedTrash.userData.height || 0.1);
+          arAI.targetPos.copy(slot.pos);
+          arAI.targetRotY = slot.rotY;
+          arAI.state = 'CARRY_TO_PALACE';
+          sound.yip();
+          haptic(20);
+        }
+      } else if (arAI.state === 'CARRY_TO_PALACE') {
+        const arrived = moveTowards(arAI.targetPos, 0.12, 1.1);
+        if (arrived && arAI.carriedTrash) {
+          // Place trash onto the Trash Palace structure
+          const placedMesh = arAI.carriedTrash;
+          arAI.carriedTrash = null;
+          arPalaceGroup.add(placedMesh);
+          placedMesh.position.copy(arAI.targetPos);
+          placedMesh.rotation.set(0, arAI.targetRotY || 0, (Math.random() - 0.5) * 0.08);
+
+          trashPieces.push(placedMesh);
+          saveARPalace();
+
+          sound.fanfare();
+          haptic([40, 30, 60]);
+          if (typeof pet !== 'undefined') {
+            pet.trashCollected = (pet.trashCollected || 0) + 12;
+            pet.chaos += 5;
+            gainXp(20);
+            updateHUD();
+            if (typeof drawTrashPalace === 'function') drawTrashPalace();
+          }
+          setLog(`Jimothy stacked a ${placedMesh.userData.trashType.replace('_', ' ')} onto his palace!`);
+          showReaction("🏰 PALACE UPGRADE!");
+
+          arAI.state = 'CELEBRATE';
+          arAI.timer = 0.9;
+        }
+      } else if (arAI.state === 'CELEBRATE') {
+        arAI.timer -= dt;
+        arModel.position.y = Math.abs(Math.sin(time * 18)) * 0.09;
+        arModel.rotation.y += dt * 10;
+        if (parts) {
+          parts.armL.rotation.x = -Math.PI * 0.8;
+          parts.armR.rotation.x = -Math.PI * 0.8;
+        }
+        if (arAI.timer <= 0) {
+          arModel.rotation.z = 0;
+          arAI.state = 'IDLE';
+          arAI.timer = 1.0;
+        }
+      }
     }
 
     function onWindowResize() {
@@ -783,10 +1105,11 @@
               }
           }
 
-          if (arModel && isARMode && jimothyPlaced) {
-              const time = performance.now() * 0.001;
-              arModel.position.y = 0.015 + Math.sin(time * 2) * 0.015; 
-              arModel.rotation.z = Math.sin(time) * 0.05; 
+          if (isARMode && jimothyPlaced) {
+              const now = performance.now();
+              const dt = Math.min(0.1, (now - (arAI.lastTime || now)) * 0.001);
+              arAI.lastTime = now;
+              updateJimothyARAI(dt, now * 0.001);
           }
           
           arRenderer.render(arScene, arCamera);
@@ -993,7 +1316,93 @@
 
     let isGeneratingAI = false;
     let isAnimatingThrow = false;
+    let reactionTimeout = null;
     let battle = { active: false, enemy: null, hp: 100, maxHp: 100, enemyHp: 100, enemyMaxHp: 100, isBlocking: false };
+
+    // Google Chat Webhook Integration
+    let chatWebhookUrl = localStorage.getItem('jima_chat_webhook') || "";
+    document.getElementById('webhookToggleBtn').addEventListener('click', () => {
+      haptic(15);
+      sound.beep();
+      const url = prompt("Enter a Google Chat Webhook URL to let Jimothy spam your team (Leave blank to disable):", chatWebhookUrl);
+      if (url !== null) {
+        chatWebhookUrl = url.trim();
+        localStorage.setItem('jima_chat_webhook', chatWebhookUrl);
+        if (chatWebhookUrl) {
+           setLog("Chat Webhook linked! He's online...");
+           showReaction("💬 LINKED!");
+           notifyChat("🦝 *Jimothy has entered the chat.* Hide your trash.");
+        } else {
+           setLog("Chat Webhook disconnected.");
+           showReaction("💬 UNLINKED");
+        }
+      }
+    });
+
+    function notifyChat(message) {
+      if (!chatWebhookUrl) return;
+      fetch(chatWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: message })
+      }).catch(e => console.error("Chat Webhook Error:", e));
+    }
+
+    // Gemini API AI Forage
+    async function generateAIFood() {
+      if (isGeneratingAI || pet.inMiniGame || pet.inHeistGame || pet.isSleeping || battle.active) return;
+      isGeneratingAI = true;
+      setLog("Consulting the AI Dumpster...");
+      sound.scuttle();
+      elements.graphic.classList.add('shake-anim');
+      
+      try {
+        const apiKey = ""; // Leave blank or insert Gemini API key
+        if (!apiKey) throw new Error("No API Key configured");
+        const payload = {
+            contents: [{ parts: [{ text: "Generate a new trash item for Jimothy the raccoon." }] }],
+            systemInstruction: { parts: [{ text: "Return valid JSON object: {name(string), hunger(-10 to 40), chaos(0 to 30), grease(-10 to 30), desc(string under 40 chars), isGross(boolean)}" }] },
+            generationConfig: { responseMimeType: "application/json" }
+        };
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        elements.graphic.classList.remove('shake-anim');
+        
+        if (result.candidates && result.candidates[0].content) {
+            const aiFood = JSON.parse(result.candidates[0].content.parts[0].text);
+            if (aiFood.isGross) {
+                elements.graphic.classList.add('shake-anim');
+                setTimeout(() => elements.graphic.classList.remove('shake-anim'), 700);
+                showReaction(`🤮 ${aiFood.name}!`);
+                pet.chaos += aiFood.chaos;
+                sound.hiss();
+                haptic([40, 50, 40]);
+                gainXp(5);
+            } else {
+                sound.munch();
+                haptic(25);
+                pet.hunger += aiFood.hunger;
+                pet.chaos += aiFood.chaos;
+                pet.grease += aiFood.grease;
+                gainXp(20 + Math.max(0, aiFood.hunger));
+                showReaction(`*NOM* ${aiFood.name}!`);
+                if (aiFood.chaos > 15) notifyChat(`✨ *AI Forage:* Jimothy devoured an AI-generated **${aiFood.name}**! (${aiFood.desc})`);
+            }
+            setLog(`AI: ${aiFood.desc}`);
+            updateHUD();
+        } else {
+            throw new Error("Invalid AI response");
+        }
+      } catch (e) {
+        elements.graphic.classList.remove('shake-anim');
+        triggerRandomAntics();
+      }
+      isGeneratingAI = false;
+    }
 
     function clearIdleAnims() {
        const juggleG = document.getElementById('juggleProps');
@@ -1003,10 +1412,15 @@
     }
 
     function triggerRandomEncounter() {
+       if (isMenuOpen) toggleMenu();
+       if (isInventoryOpen) toggleInventory();
+
        const enemies = [
          { name: "FERAL CAT", emoji: "🐈", hp: 100, dmg: 15 },
          { name: "TRASH POSSUM", emoji: "🦡", hp: 150, dmg: 10 },
-         { name: "CITY CROW", emoji: "🐦‍⬛", hp: 80, dmg: 20 }
+         { name: "CITY CROW", emoji: "🐦‍⬛", hp: 80, dmg: 20 },
+         { name: "SEWER GATOR", emoji: "🐊", hp: 180, dmg: 18 },
+         { name: "ANGRY GOOSE", emoji: "🪿", hp: 120, dmg: 22 }
        ];
        battle.enemy = enemies[Math.floor(Math.random() * enemies.length)];
        battle.enemyHp = battle.enemyMaxHp = battle.enemy.hp;
@@ -1021,6 +1435,7 @@
        
        renderBattleScreen();
        sound.fanfare();
+       haptic([100, 50, 100]);
        setLog(`A wild ${battle.enemy.name} wants your trash!`);
     }
 
@@ -1050,16 +1465,19 @@
     function playerBattleAction(btn) {
        if (btn === 'A') { 
           sound.munch();
+          haptic(30);
           battle.enemyHp -= 25;
           showReaction("BITE!");
        } else if (btn === 'B') { 
           sound.scuttle();
+          haptic(20);
           battle.isBlocking = true;
           showReaction("BLOCK!");
        } else if (btn === 'SELECT') { 
           if (pet.hunger >= 5) {
              pet.hunger -= 5;
              sound.thud();
+             haptic([40, 50, 40]);
              battle.enemyHp -= 40;
              showReaction("YEET!");
              updateHUD();
@@ -1071,10 +1489,12 @@
        } else if (btn === 'START') { 
           if (Math.random() > 0.5) {
              sound.scuttle();
+             haptic(15);
              endBattle(false, "Got away safely!");
              return;
           } else {
              sound.beep();
+             haptic([40, 50, 40]);
              showReaction("Failed to flee!");
           }
        }
@@ -1098,6 +1518,7 @@
 
        battle.hp -= dmg;
        showReaction(`${battle.enemy.name} attacked!`);
+       haptic([40, 50, 40]);
        document.getElementById('jimothyGraphic').classList.add('shake-anim');
        setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 300);
 
@@ -1121,7 +1542,7 @@
           gainXp(100);
           pet.chaos += 15;
           setLog(msg);
-          if (Math.random() > 0.5) {
+          if (Math.random() > 0.35) {
              const items = Object.keys(ITEM_DB);
              const dropped = items[Math.floor(Math.random() * items.length)];
              pet.inventory = pet.inventory || {};
@@ -1156,7 +1577,11 @@
       { name: "Soggy Fries", hunger: +18, chaos: +5, grease: +10, desc: "Slurped down 4 limp fries!" },
       { name: "Fish Skeleton", hunger: +25, chaos: +10, grease: +15, desc: "Crunched the spine with glee!" },
       { name: "Half a Donut", hunger: +35, chaos: +20, grease: +5, desc: "Sugar rush activated!" },
-      { name: "Fresh Broccoli", hunger: -10, chaos: +30, grease: -5, isGross: true, desc: "Hissed and chucked the greens!" }
+      { name: "Fresh Broccoli", hunger: -10, chaos: +30, grease: -5, isGross: true, desc: "Hissed and chucked the greens!" },
+      { name: "Parking Lot Taco", hunger: +30, chaos: +15, grease: +20, desc: "Gravel adds extra crunch!" },
+      { name: "Crayon Stubs", hunger: +12, chaos: +18, grease: +8, desc: "Tastes like purple!" },
+      { name: "Kale Smoothie", hunger: -15, chaos: +35, grease: -15, isGross: true, desc: "VILE HEALTH FOOD! Spat it out!" },
+      { name: "2019 McNugget", hunger: +22, chaos: +12, grease: +18, desc: "Aged like fine petrified wood." }
     ];
 
     const elements = {
@@ -1179,9 +1604,13 @@
     const btnMenu = document.getElementById('btnMenu');
 
     function showReaction(text, duration = 1600) {
+      if (reactionTimeout) clearTimeout(reactionTimeout);
       elements.bubble.textContent = text;
       elements.bubble.style.opacity = '1';
-      setTimeout(() => elements.bubble.style.opacity = '0', duration);
+      reactionTimeout = setTimeout(() => {
+        elements.bubble.style.opacity = '0';
+        reactionTimeout = null;
+      }, duration);
     }
     
     function setLog(msg) { elements.log.textContent = msg; }
@@ -1238,6 +1667,7 @@
       }
       
       if (leveledUp) {
+        haptic([100, 50, 100, 50, 200]);
         pet.awardsUnlocked = pet.awardsUnlocked || [];
         const MILESTONES = [
           { level: 5, emoji: "🥉", name: "BRONZE BIN" }, { level: 10, emoji: "🥈", name: "SILVER SCRAPS" },
@@ -1256,6 +1686,7 @@
         else { sound.fanfare(); showReaction(`⭐ LEVEL ${pet.level}!`, 2500); }
         setLog(`Jimothy leveled up to LVL ${pet.level}! Energy restored.`);
         checkEvolution();
+        notifyChat(`⭐ *LEVEL UP!* Jimothy is now Level ${pet.level}!`);
       }
     }
 
@@ -1289,9 +1720,11 @@
         sound.fanfare();
         showReaction("⚡ EVOLVED! ⚡", 2500);
         notifier.send('evolve', 'Jimothy Mutated! ⚡', `God help us all, he's now a ${title}...`, 0);
+        notifyChat(`⚡ *EVOLUTION!* Jimothy has mutated into a **${title}**!`);
       }
       let xpReq = pet.level * 50 + Math.floor(Math.pow(pet.level, 1.5) * 10);
       elements.rankBadge.textContent = `LVL ${pet.level} ${title}`;
+      elements.rankBadge.title = `XP: ${Math.floor(pet.xp)} / ${xpReq}`;
     }
 
     let isMenuOpen = false, menuIndex = 0;
@@ -1307,7 +1740,22 @@
       'sludge': { icon: '🧪', name: 'Glow Sludge', desc: 'Delicious. GREASE+30 TRASH+10', use: () => { pet.grease+=30; pet.hunger+=10; sound.munch(); } },
       'rat_toy': { icon: '🐁', name: 'Rubber Rat', desc: 'Squeak! Calms him down. CHAOS-25', use: () => { pet.chaos-=25; sound.beep(); } },
       'stale_pizza': { icon: '🍕', name: 'Floor Pizza', desc: 'Aged perfectly. TRASH+40', use: () => { pet.hunger+=40; sound.munch(); } },
-      'energy_drink': { icon: '🥫', name: 'Jolt Cola', desc: 'Liquid zoom! ENERGY+50 CHAOS+30', use: () => { pet.energy+=50; pet.chaos+=30; sound.fanfare(); } }
+      'energy_drink': { icon: '🥫', name: 'Jolt Cola', desc: 'Liquid zoom! ENERGY+50 CHAOS+30', use: () => { pet.energy+=50; pet.chaos+=30; sound.fanfare(); } },
+      'leftover_sushi': { icon: '🍣', name: 'Warm Gas Sushi', desc: 'Questionable. TRASH+45 CHAOS+20', use: () => { pet.hunger+=45; pet.chaos+=20; sound.munch(); } },
+      'shiny_spoon': { icon: '🥄', name: 'Bent Spoon', desc: 'Ooooh shiny! CAPS+2 CHAOS-15', use: () => { pet.shinyCaps+=2; pet.chaos-=15; sound.fanfare(); } },
+      'bacon_jar': { icon: '🫙', name: 'Bacon Drip Jar', desc: 'Pure lard. GREASE+50 TRASH+25', use: () => { pet.grease+=50; pet.hunger+=25; sound.trill(); } },
+      'bubble_wrap': { icon: '🫧', name: 'Bubble Wrap', desc: 'Pop pop pop! CHAOS-40 ENERGY-5', use: () => { pet.chaos-=40; pet.energy-=5; sound.beep(); } },
+      'espresso_pod': { icon: '☕', name: 'Used Espresso', desc: 'Crunchy grounds! ENERGY+45 CHAOS+20', use: () => { pet.energy+=45; pet.chaos+=20; sound.scuttle(); } },
+      'copper_wire': { icon: '🔌', name: 'Copper Wire', desc: 'Stripped from a wall. CAPS+3 CHAOS+10', use: () => { pet.shinyCaps+=3; pet.chaos+=10; sound.fanfare(); } },
+      'moldy_bagel': { icon: '🥯', name: 'Fuzzy Bagel', desc: 'Penicillin boost! TRASH+30 GREASE+15', use: () => { pet.hunger+=30; pet.grease+=15; sound.munch(); } },
+      'catnip_mouse': { icon: '🧶', name: 'Catnip Yarn', desc: 'Stolen from a cat. CHAOS+35 ENERGY+15', use: () => { pet.chaos+=35; pet.energy+=15; sound.yip(); } },
+      'hairball': { icon: '🧶', name: 'Cursed Hairball', desc: 'Why did he eat it?! GREASE+40 TRASH+5', use: () => { pet.grease+=40; pet.hunger+=5; sound.hiss(); } },
+      'gold_tooth': { icon: '🦷', name: 'Gold Crown', desc: 'Found in an alley. CAPS+5!', use: () => { pet.shinyCaps+=5; sound.fanfare(); } },
+      'hot_sauce': { icon: '🌶️', name: 'Taco Sauce Pkt', desc: 'FIRE MOUTH! CHAOS+40 ENERGY+20', use: () => { pet.chaos+=40; pet.energy+=20; sound.hiss(); } },
+      'cardboard_tube': { icon: '🧻', name: 'TP Roll Tube', desc: 'Bap bap! PALACE+25 CHAOS-15', use: () => { pet.trashCollected=(pet.trashCollected||0)+25; pet.chaos-=15; drawTrashPalace(); sound.thud(); } },
+      'rac_crown': { icon: '🥫', name: 'Golden Pull-Tab', desc: 'Royal currency! CAPS+4 XP+50', use: () => { pet.shinyCaps+=4; gainXp(50); sound.fanfare(); } },
+      'mystery_meat': { icon: '🍖', name: 'Alley Rib-Bite', desc: 'Unknown origin. TRASH+55 GREASE+20', use: () => { pet.hunger+=55; pet.grease+=20; sound.trill(); } },
+      'soap_bar': { icon: '🧼', name: 'Hotel Soap', desc: 'CURSED CLEANLINESS! GREASE-35 CHAOS+25', use: () => { pet.grease-=35; pet.chaos+=25; sound.hiss(); } }
     };
 
     function renderMenu() {
@@ -1338,16 +1786,16 @@
     }
 
     function toggleMenu() {
-      if (pet.inMiniGame || pet.inHeistGame) return;
+      if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
       isMenuOpen = !isMenuOpen;
-      isConfirmReset = false; // Always clear confirm state when toggling
+      isConfirmReset = false;
       const menuDiv = document.getElementById('menuScreen');
       if (isMenuOpen) { menuIndex = 0; menuDiv.classList.remove('hidden'); menuDiv.classList.add('flex'); renderMenu(); sound.beep(); } 
       else { menuDiv.classList.add('hidden'); menuDiv.classList.remove('flex'); sound.beep(); }
     }
 
     function toggleInventory() {
-      if (pet.inMiniGame || pet.inHeistGame) return;
+      if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
       isInventoryOpen = !isInventoryOpen;
       const invDiv = document.getElementById('inventoryScreen');
       if (isInventoryOpen) { invDiv.classList.remove('hidden'); invDiv.classList.add('flex'); renderInventory(); sound.beep(); } 
@@ -1357,10 +1805,14 @@
     function renderInventory() {
       const grid = document.getElementById('inventoryGrid');
       const desc = document.getElementById('inventoryDesc');
+      const header = document.getElementById('inventoryHeader');
       grid.innerHTML = '';
       pet.inventory = pet.inventory || {};
-      invItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0);
-      if (invItems.length === 0) { desc.innerHTML = "BAG IS EMPTY.<br/>Play RAID to find items!"; return; }
+      invItems = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0 && ITEM_DB[k]);
+      const totalTypes = Object.keys(ITEM_DB).length;
+      if (header) header.textContent = `BAG (${invItems.length}/${totalTypes})`;
+
+      if (invItems.length === 0) { desc.innerHTML = "BAG IS EMPTY.<br/>Play RAID or HEIST to loot!"; return; }
       if (invIndex >= invItems.length) invIndex = Math.max(0, invItems.length - 1);
       invItems.forEach((itemId, idx) => {
         const item = ITEM_DB[itemId], count = pet.inventory[itemId];
@@ -1371,26 +1823,50 @@
         slot.style.color = idx === invIndex ? 'var(--lcd-bg)' : 'var(--lcd-pixel)';
         slot.innerHTML = `<span class="pixelated">${item.icon}</span><span class="absolute bottom-0 right-0.5 text-[6px] sm:text-[7px] font-bold">x${count}</span>`;
         grid.appendChild(slot);
+        if (idx === invIndex) {
+          setTimeout(() => slot.scrollIntoView({ block: 'nearest' }), 0);
+        }
       });
       const activeItem = ITEM_DB[invItems[invIndex]];
       desc.innerHTML = `[${activeItem.name}]<br/>${activeItem.desc}`;
     }
     
     function performReset() {
-      localStorage.removeItem(STATE_KEY); 
-      pet = { name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70, shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0, palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [], inMiniGame: false, inHeistGame: false };
-      if (pet.inMiniGame || pet.inHeistGame) {
-        clearInterval(miniGameInterval);
-        if (typeof heistInterval !== 'undefined') clearInterval(heistInterval);
-        document.getElementById('miniGameScreen').classList.add('hidden');
-        document.getElementById('miniGameScreen').classList.remove('flex');
+      // Clear active timers and states BEFORE overwriting the pet object
+      if (miniGameInterval) clearInterval(miniGameInterval);
+      if (heistInterval) clearInterval(heistInterval);
+      if (dreamInterval) clearInterval(dreamInterval);
+      battle.active = false;
+
+      document.getElementById('miniGameScreen').classList.add('hidden');
+      document.getElementById('miniGameScreen').classList.remove('flex');
+
+      // Wipe 2D and 3D AR persistence
+      localStorage.removeItem(STATE_KEY);
+      localStorage.removeItem('jima_ar_palace');
+      if (arPalaceGroup) {
+        trashPieces.forEach(p => arPalaceGroup.remove(p));
+        uncollectedTrash.forEach(p => arPalaceGroup.remove(p));
       }
+      trashPieces.length = 0;
+      uncollectedTrash.length = 0;
+
+      pet = {
+        name: "Jimothy", ageMinutes: 1, hunger: 80, chaos: 45, grease: 60, energy: 70,
+        shinyCaps: 3, stage: 'kit', isSleeping: false, trashCollected: 0, raidFrenzy: 0,
+        palaceSeed: Math.random(), inventory: {}, level: 1, xp: 0, awardsUnlocked: [],
+        inMiniGame: false, inHeistGame: false
+      };
+
+      clearIdleAnims();
+      elements.graphic.classList.remove('shake-anim', 'scurry-anim');
       elements.graphic.classList.add('idle-anim');
       elements.eyes.style.display = 'block';
       elements.sleepZzz.style.display = 'none';
       const dreamBubble = document.getElementById('dreamBubble');
       if (dreamBubble) { dreamBubble.classList.add('hidden'); dreamBubble.classList.remove('flex'); }
-      if (dreamInterval) clearInterval(dreamInterval);
+
+      drawTrashPalace();
       showReaction("🐣 REBORN KIT!");
       setLog("A fresh Jimothy crawled out of the recycling bin.");
       updateHUD();
@@ -1403,7 +1879,7 @@
         isConfirmReset = true;
         resetMenuIndex = 1; // Default to NO
         renderMenu();
-        return; // Don't toggleMenu yet
+        return;
       }
 
       toggleMenu();
@@ -1411,7 +1887,7 @@
       else if (opt.includes("LINT")) btnStart.click(); 
       else if (opt.includes("INVENTORY")) toggleInventory();
       else if (opt.includes("HEIST")) initHeistGame();
-      else if (opt.includes("AI FORAGE")) triggerRandomAntics();
+      else if (opt.includes("AI FORAGE")) generateAIFood();
     }
 
     function updateHUD() {
@@ -1458,11 +1934,12 @@
     }
 
     function throwTrashAtScreen() {
-      if (pet.inMiniGame || pet.inHeistGame || pet.isSleeping || isAnimatingThrow) return;
+      if (pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || pet.isSleeping || isAnimatingThrow) return;
       isAnimatingThrow = true;
       const projectiles = [ { emoji: "🍅", type: "splat", log: "a rotten tomato" }, { emoji: "🪨", type: "crack", log: "a heavy rock" }, { emoji: "🥦", type: "glitch", log: "cursed broccoli" }, { emoji: "🥫", type: "crack", log: "a soup can" } ];
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
       sound.thud();
+      haptic([40, 50, 40]);
       elements.graphic.classList.remove('idle-anim');
       elements.graphic.style.transform = 'scale(1.5) translateY(10px)';
       
@@ -1486,16 +1963,36 @@
 
     function triggerRandomAntics() {
       const events = [
-        { text: "Chewed through an HDMI cable!", chaos: +10 }, { text: "Broke into the mainframe!", hunger: +10, chaos: +12 },
-        { text: "Hacked the Pentagon.", chaos: +25 }, { text: "Knocked over a virtual potted plant.", chaos: +12 },
-        { text: "Found a spicy battery!", item: 'battery', chaos: +5 }, { text: "Dug up some glow sludge.", item: 'sludge' }, { text: "Stole a rubber rat!", item: 'rat_toy' }
+        { text: "Chewed through an HDMI cable!", chaos: +10, item: 'copper_wire' },
+        { text: "Broke into the mainframe!", hunger: +10, chaos: +12 },
+        { text: "Hacked the Pentagon.", chaos: +25 },
+        { text: "Knocked over a virtual potted plant.", chaos: +12 },
+        { text: "Found a spicy battery!", item: 'battery', chaos: +5 },
+        { text: "Dug up some glow sludge.", item: 'sludge' },
+        { text: "Stole a rubber rat!", item: 'rat_toy' },
+        { text: "Looted a gas station roller grill!", item: 'leftover_sushi', hunger: +10 },
+        { text: "Swiped a bent spoon from a diner!", item: 'shiny_spoon', chaos: +5 },
+        { text: "Found a jar of bacon drippings!", item: 'bacon_jar', grease: +10 },
+        { text: "Raided a coffee shop bin!", item: 'espresso_pod', chaos: +8 },
+        { text: "Stole a cat's favorite toy!", item: 'catnip_mouse', chaos: +12 },
+        { text: "Found a fuzzy everything bagel!", item: 'moldy_bagel' },
+        { text: "Unraveled an entire roll of TP!", item: 'cardboard_tube', chaos: +15 },
+        { text: "Found a packet of Diablo sauce!", item: 'hot_sauce' },
+        { text: "Accidentally licked hotel soap!", item: 'soap_bar', chaos: +10 }
       ];
       const ev = events[Math.floor(Math.random() * events.length)];
       if (ev.chaos) pet.chaos += ev.chaos;
       if (ev.hunger) pet.hunger += ev.hunger;
-      if (ev.item) { pet.inventory = pet.inventory || {}; pet.inventory[ev.item] = (pet.inventory[ev.item] || 0) + 1; showReaction(`+${ITEM_DB[ev.item].icon}`); } 
-      else showReaction("👀 *CRASH!*");
+      if (ev.grease) pet.grease += ev.grease;
+      if (ev.item && ITEM_DB[ev.item]) {
+        pet.inventory = pet.inventory || {};
+        pet.inventory[ev.item] = (pet.inventory[ev.item] || 0) + 1;
+        showReaction(`+${ITEM_DB[ev.item].icon} ${ITEM_DB[ev.item].name}!`);
+      } else {
+        showReaction("👀 *CRASH!*");
+      }
       gainXp(15); setLog(ev.text); sound.beep();
+      if (pet.chaos > 60 && ev.chaos) notifyChat(`💥 *CHAOTIC ANTICS:* ${ev.text} (Chaos: ${Math.round(pet.chaos)}%)`);
     }
 
     let dreamInterval = null;
@@ -1510,47 +2007,56 @@
 
     setInterval(() => {
       pet.ageMinutes += 1;
+      const isBusy = pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen;
+
       if (pet.isSleeping) {
         pet.energy = Math.min(100, pet.energy + 8); gainXp(1); 
       } else {
         pet.hunger = Math.max(0, pet.hunger - 2.5); pet.chaos = Math.min(100, pet.chaos + 2);
         pet.grease = Math.max(0, pet.grease - 1); pet.energy = Math.max(0, pet.energy - 1.5);
+        
         if (pet.hunger < 20) {
           notifier.send('hunger', 'Starvation Imminent! 🥫', 'Jimothy is chewing the drywall. Feed him!', 120000);
-          if (!pet.inMiniGame && !pet.inHeistGame && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
-        } else if (pet.chaos > 85) notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. Coax him!', 120000);
+          if (!isBusy && !isAnimatingThrow && !pet.isSleeping && Math.random() < 0.4) sound.grumble();
+        } else if (pet.chaos > 85) {
+          notifier.send('chaos', 'Absolute Havoc! 🔥', 'Jimothy is going feral. Coax him!', 120000);
+        }
 
-        if (pet.chaos >= 60 && pet.hunger < 50 && Math.random() < 0.4) {
-            if (!isAnimatingThrow) throwTrashAtScreen();
-        } else if (Math.random() < 0.20) triggerRandomAntics();
-        else if (Math.random() < 0.15 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) triggerRandomEncounter();
-        else if (Math.random() < 0.20 && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
-          const anims = ['juggle', 'plates'], picked = anims[Math.floor(Math.random() * anims.length)];
-          const juggleG = document.getElementById('juggleProps'), plateG = document.getElementById('plateProps');
-          if (picked === 'juggle') { juggleG.style.display = 'block'; plateG.style.display = 'none'; setLog("Jimothy is juggling garbage!"); } 
-          else { plateG.style.display = 'block'; juggleG.style.display = 'none'; setLog("Jimothy is spinning plates!"); }
-          setTimeout(() => clearIdleAnims(), 6000);
-        } else {
-          gainXp(3);
-          let didBuild = false, didRearrange = false;
-          if (pet.raidFrenzy > 0) { pet.raidFrenzy--; pet.trashCollected = (pet.trashCollected || 0) + 8; didBuild = true; if (Math.random() < 0.35) didRearrange = true; if (Math.random() < 0.4) setLog("RAID FRENZY! Palace building accelerated!"); } 
-          else if (pet.hunger >= 20) { pet.hunger -= 3; pet.trashCollected = (pet.trashCollected || 0) + 2; didBuild = true; if (Math.random() < 0.15) didRearrange = true; if (Math.random() < 0.2) setLog("Jimothy spent some TRASH to upgrade his palace."); } 
-          else { pet.trashCollected = (pet.trashCollected || 0) + 0.2; if (Math.random() < 0.2) setLog("Need more TRASH to build palace..."); }
-          if (didRearrange) { pet.palaceSeed = Math.random(); setLog("Jimothy is frantically rearranging his trash!"); }
-          if (didBuild && !isAnimatingThrow && !pet.isSleeping && !pet.inMiniGame && !pet.inHeistGame) {
-              if (Math.random() < 0.4 || didRearrange) {
-                  elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('scurry-anim'); sound.scuttle();
-                  setTimeout(() => { elements.graphic.classList.remove('scurry-anim'); if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame) { elements.graphic.classList.add('idle-anim'); } }, didRearrange ? 2500 : 1200); 
+        if (!isBusy) {
+          if (pet.chaos >= 60 && pet.hunger < 50 && Math.random() < 0.4) {
+              if (!isAnimatingThrow) throwTrashAtScreen();
+          } else if (Math.random() < 0.20) {
+              triggerRandomAntics();
+          } else if (Math.random() < 0.15) {
+              triggerRandomEncounter();
+          } else if (Math.random() < 0.20) {
+              const anims = ['juggle', 'plates'], picked = anims[Math.floor(Math.random() * anims.length)];
+              const juggleG = document.getElementById('juggleProps'), plateG = document.getElementById('plateProps');
+              if (picked === 'juggle') { juggleG.style.display = 'block'; plateG.style.display = 'none'; setLog("Jimothy is juggling garbage!"); } 
+              else { plateG.style.display = 'block'; juggleG.style.display = 'none'; setLog("Jimothy is spinning plates!"); }
+              setTimeout(() => clearIdleAnims(), 6000);
+          } else {
+              gainXp(3);
+              let didBuild = false, didRearrange = false;
+              if (pet.raidFrenzy > 0) { pet.raidFrenzy--; pet.trashCollected = (pet.trashCollected || 0) + 8; didBuild = true; if (Math.random() < 0.35) didRearrange = true; if (Math.random() < 0.4) setLog("RAID FRENZY! Palace building accelerated!"); } 
+              else if (pet.hunger >= 20) { pet.hunger -= 3; pet.trashCollected = (pet.trashCollected || 0) + 2; didBuild = true; if (Math.random() < 0.15) didRearrange = true; if (Math.random() < 0.2) setLog("Jimothy spent some TRASH to upgrade his palace."); } 
+              else { pet.trashCollected = (pet.trashCollected || 0) + 0.2; if (Math.random() < 0.2) setLog("Need more TRASH to build palace..."); }
+              if (didRearrange) { pet.palaceSeed = Math.random(); setLog("Jimothy is frantically rearranging his trash!"); }
+              if (didBuild && !isAnimatingThrow && !pet.isSleeping) {
+                  if (Math.random() < 0.4 || didRearrange) {
+                      elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('scurry-anim'); sound.scuttle();
+                      setTimeout(() => { elements.graphic.classList.remove('scurry-anim'); if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame && !pet.inHeistGame && !battle.active) { elements.graphic.classList.add('idle-anim'); } }, didRearrange ? 2500 : 1200); 
+                  }
               }
+              drawTrashPalace();
           }
-          drawTrashPalace();
         }
       }
       updateHUD();
     }, 10000);
 
     function toggleNap() {
-      if (pet.inMiniGame) return;
+      if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
       pet.isSleeping = !pet.isSleeping;
       const dreamBubble = document.getElementById('dreamBubble');
       if (pet.isSleeping) {
@@ -1571,6 +2077,7 @@
       pet.inMiniGame = true; miniGameTimerVal = 15; cansTipped = 0; dogWaking = 0;
       document.getElementById('miniGameScreen').classList.remove('hidden'); document.getElementById('miniGameScreen').classList.add('flex');
       document.getElementById('gameTitle').textContent = "MIDNIGHT RAID";
+      document.getElementById('gameInstructions').textContent = "TAP [A] TIP BIN | [B] SNEAK";
       renderGameScreen();
       miniGameInterval = setInterval(() => {
         miniGameTimerVal--; document.getElementById('gameTimer').textContent = `TIME: ${miniGameTimerVal}s`;
@@ -1599,11 +2106,11 @@
 
     function miniGameHandleButton(btn) {
       if (btn === 'A') {
-        if (dogWaking >= 3) { sound.hiss(); dogWaking += 2; renderGameScreen(); } 
+        if (dogWaking >= 3) { sound.hiss(); haptic([40, 50, 40]); dogWaking += 2; renderGameScreen(); } 
         else {
-          sound.munch(); cansTipped++; dogWaking = Math.min(3, dogWaking + 1);
+          sound.munch(); haptic(30); cansTipped++; dogWaking = Math.min(3, dogWaking + 1);
           if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++;
-          if (Math.random() > 0.8) {
+          if (Math.random() > 0.70) {
              const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
              pet.inventory = pet.inventory || {}; pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
              showReaction(`Found ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
@@ -1611,8 +2118,8 @@
           renderGameScreen();
         }
       } else if (btn === 'B') {
-        if (pet.hunger > 100 && Math.random() < 0.3) { sound.thud(); showReaction("Too fat to hide!"); } 
-        else { sound.scuttle(); dogWaking = Math.max(0, dogWaking - 1); }
+        if (pet.hunger > 100 && Math.random() < 0.3) { sound.thud(); haptic([40, 50, 40]); showReaction("Too fat to hide!"); } 
+        else { sound.scuttle(); haptic(20); dogWaking = Math.max(0, dogWaking - 1); }
         renderGameScreen();
       }
     }
@@ -1622,10 +2129,11 @@
       document.getElementById('miniGameScreen').classList.add('hidden'); document.getElementById('miniGameScreen').classList.remove('flex');
       pet.energy -= 20;
       if (won) {
-        sound.fanfare(); let loot = cansTipped * 15; pet.trashCollected = (pet.trashCollected || 0) + loot;
+        sound.fanfare(); haptic([100, 50, 100, 50, 200]); let loot = cansTipped * 15; pet.trashCollected = (pet.trashCollected || 0) + loot;
         pet.hunger = Math.min(100, pet.hunger + (cansTipped * 8)); pet.raidFrenzy = 6; pet.chaos += 10; pet.grease += 5;
         gainXp(50 + (cansTipped * 10)); showReaction(`👑 +${loot} TRASH!`); message = `Looted ${cansTipped} bins & triggered a BUILD FRENZY!`;
       } else {
+        haptic([40, 50, 40]);
         document.getElementById('jimothyGraphic').classList.remove('idle-anim'); document.getElementById('jimothyGraphic').classList.add('shake-anim');
         setTimeout(() => { document.getElementById('jimothyGraphic').classList.remove('shake-anim'); if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim'); }, 700);
         showReaction("💨 SCRAMBLED!");
@@ -1641,6 +2149,7 @@
       pet.inHeistGame = true; heistTimerVal = 20; heistLoot = 0; suspicion = 0;
       document.getElementById('miniGameScreen').classList.remove('hidden'); document.getElementById('miniGameScreen').classList.add('flex');
       document.getElementById('gameTitle').textContent = "NIGHT HEIST";
+      document.getElementById('gameInstructions').textContent = "TAP [A] SNATCH | [B] FREEZE";
       renderHeistScreen();
       heistInterval = setInterval(() => {
         heistTimerVal--; document.getElementById('gameTimer').textContent = `TIME: ${heistTimerVal}s`;
@@ -1670,17 +2179,17 @@
 
     function heistHandleButton(btn) {
       if (btn === 'A') {
-        if (suspicion >= 85) { sound.hiss(); suspicion += 20; renderHeistScreen(); } 
+        if (suspicion >= 85) { sound.hiss(); haptic([40, 50, 40]); suspicion += 20; renderHeistScreen(); } 
         else {
-          sound.munch(); heistLoot++; suspicion += 15 + Math.floor(Math.random() * 10);
-          if (Math.random() > 0.5) {
+          sound.munch(); haptic(30); heistLoot++; suspicion += 15 + Math.floor(Math.random() * 10);
+          if (Math.random() > 0.45) {
              const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
              pet.inventory = pet.inventory || {}; pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
              showReaction(`Stole ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
           } else showReaction("Snatch!");
           renderHeistScreen();
         }
-      } else if (btn === 'B') { sound.scuttle(); suspicion = Math.max(0, suspicion - 30); showReaction("Frozen..."); renderHeistScreen(); }
+      } else if (btn === 'B') { sound.scuttle(); haptic(20); suspicion = Math.max(0, suspicion - 30); showReaction("Frozen..."); renderHeistScreen(); }
     }
 
     function endHeistGame(won, message) {
@@ -1688,10 +2197,11 @@
       document.getElementById('miniGameScreen').classList.add('hidden'); document.getElementById('miniGameScreen').classList.remove('flex');
       pet.energy -= 25;
       if (won) {
-        sound.fanfare(); let lootTrash = heistLoot * 10; pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
+        sound.fanfare(); haptic([100, 50, 100, 50, 200]); let lootTrash = heistLoot * 10; pet.trashCollected = (pet.trashCollected || 0) + lootTrash;
         pet.hunger = Math.min(150, pet.hunger + (heistLoot * 5)); pet.chaos += 20; pet.shinyCaps += Math.floor(heistLoot / 2); 
         gainXp(100 + (heistLoot * 15)); showReaction(`👑 HEIST SUCCESS!`);
       } else {
+        haptic([40, 50, 40]);
         document.getElementById('jimothyGraphic').classList.remove('idle-anim'); document.getElementById('jimothyGraphic').classList.add('shake-anim');
         setTimeout(() => { document.getElementById('jimothyGraphic').classList.remove('shake-anim'); if (!pet.isSleeping) document.getElementById('jimothyGraphic').classList.add('idle-anim'); }, 700);
         showReaction("🚨 BUSTED!"); pet.hunger = Math.max(0, pet.hunger - 20);
@@ -1718,11 +2228,13 @@
     }
 
     btnMenu.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims();
       if (isInventoryOpen) toggleInventory(); else toggleMenu();
     });
 
     btnA.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('A'); return; }
       if (isInventoryOpen) {
@@ -1754,7 +2266,7 @@
       if (food.isGross) {
         elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('shake-anim');
         setTimeout(() => { elements.graphic.classList.remove('shake-anim'); elements.graphic.classList.add('idle-anim'); }, 700);
-        showReaction("🤮 GROSS!"); sound.hiss(); gainXp(5);
+        showReaction("🤮 GROSS!"); sound.hiss(); haptic([40, 50, 40]); gainXp(5);
       } else {
         if (food.hunger > 30) sound.trill(); else sound.munch();
         showReaction(`*NOM* ${food.name}!`); gainXp(15 + food.hunger);
@@ -1763,13 +2275,14 @@
     });
 
     btnB.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('B'); return; }
       if (isInventoryOpen) { toggleInventory(); return; }
       if (isMenuOpen) {
         if (isConfirmReset) {
             isConfirmReset = false;
-            renderMenu(); // Return to main menu safely
+            renderMenu();
             return;
         }
         toggleMenu(); 
@@ -1781,16 +2294,18 @@
     });
 
     btnSelect.addEventListener('click', () => { 
+      haptic(15);
       clearIdleAnims(); sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
-      if (pet.inMiniGame || pet.inHeistGame) return;
+      if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen) return;
       toggleNap(); 
     });
     
     btnStart.addEventListener('click', () => {
+      haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
-      if (pet.inMiniGame || pet.inHeistGame) return;
+      if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen) return;
       sound.scuttle(); if (pet.isSleeping) return;
       pet.grease = Math.min(100, pet.grease + 25); gainXp(15);
       showReaction("✨ Fresh Grime!"); setLog("Coated Jimothy in warm, linty goodness."); updateHUD();
@@ -1798,7 +2313,7 @@
 
     const pokeAction = () => {
        haptic(25); clearIdleAnims();
-       if (pet.isSleeping || isMenuOpen || isInventoryOpen) return;
+       if (pet.isSleeping || isMenuOpen || isInventoryOpen || pet.inMiniGame || pet.inHeistGame || battle.active) return;
        const pokeEvents = [
          { sfx: 'yip', msg: "🐾 *YIP!*", log: "You poked Jimothy.", chaos: 2 }, { sfx: 'grumble', msg: "💢 *GRUMBLE*", log: "Jimothy growled at your finger.", chaos: 5 },
          { sfx: 'trill', msg: "✨ *TRILL*", log: "Jimothy purred happily.", chaos: -2 }, { sfx: 'hiss', msg: "🤬 *HISS*", log: "Jimothy hated that.", chaos: 8 }, { sfx: 'scuttle', msg: "🏃 *SCUTTLE*", log: "Jimothy dodged your finger.", chaos: 0 }
@@ -1806,6 +2321,7 @@
        const ev = pokeEvents[Math.floor(Math.random() * pokeEvents.length)];
        if (ev.sfx === 'hiss') {
            elements.graphic.classList.remove('idle-anim'); elements.graphic.classList.add('shake-anim');
+           haptic([40, 50, 40]);
            setTimeout(() => { elements.graphic.classList.remove('shake-anim'); if(!pet.isSleeping) elements.graphic.classList.add('idle-anim'); }, 700);
        }
        sound[ev.sfx](); pet.chaos += ev.chaos; showReaction(ev.msg); setLog(ev.log); updateHUD();
@@ -1847,12 +2363,12 @@
       else pokeAction();
     });
 
-    document.getElementById('deviceToggleBtn').addEventListener('click', () => { sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000); });
-    document.getElementById('colorToggleBtn').addEventListener('click', () => { sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000); });
-    document.getElementById('lcdToggleBtn').addEventListener('click', () => { sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000); });
-    document.getElementById('notifToggleBtn').addEventListener('click', async (e) => { sound.beep(); const isEnabled = await notifier.toggle(); e.target.textContent = isEnabled ? '🔔' : '🔕'; showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500); });
+    document.getElementById('deviceToggleBtn').addEventListener('click', () => { haptic(15); sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000); });
+    document.getElementById('colorToggleBtn').addEventListener('click', () => { haptic(15); sound.beep(); prefs.themeIdx = (prefs.themeIdx + 1) % THEMES.length; applyPrefs(); showReaction(`🎨 ${THEMES[prefs.themeIdx].name} Theme`, 1000); });
+    document.getElementById('lcdToggleBtn').addEventListener('click', () => { haptic(15); sound.beep(); prefs.lcdIdx = (prefs.lcdIdx + 1) % LCD_STYLES.length; applyPrefs(); showReaction(`💡 ${LCD_STYLES[prefs.lcdIdx].name} LCD`, 1000); });
+    document.getElementById('notifToggleBtn').addEventListener('click', async (e) => { haptic(15); sound.beep(); const isEnabled = await notifier.toggle(); e.target.textContent = isEnabled ? '🔔' : '🔕'; showReaction(isEnabled ? "🔔 Notifs ON" : "🔕 Notifs OFF", 1500); });
     document.getElementById('hapticToggleBtn').addEventListener('click', (e) => { sound.beep(); prefs.hapticsEnabled = !prefs.hapticsEnabled; e.target.textContent = prefs.hapticsEnabled ? '📳' : '📴'; applyPrefs(); showReaction(prefs.hapticsEnabled ? "📳 Haptics ON" : "📴 Haptics OFF", 1500); if (prefs.hapticsEnabled) haptic([30, 30, 30]); });
-    document.getElementById('soundToggleBtn').addEventListener('click', (e) => { const isMuted = sound.toggleMute(); e.target.textContent = isMuted ? '🔇' : '🔊'; if (!isMuted) sound.beep(); });
+    document.getElementById('soundToggleBtn').addEventListener('click', (e) => { haptic(15); const isMuted = sound.toggleMute(); e.target.textContent = isMuted ? '🔇' : '🔊'; if (!isMuted) sound.beep(); });
 
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
@@ -1864,7 +2380,7 @@
       if (e.key.toLowerCase() === 'b' || e.key === '2') btnB.click();
     });
 
-    loadPrefs(); loadState(); updateHUD();
+    loadPrefs(); loadState(); drawTrashPalace(); updateHUD();
     
     if (pet.isSleeping) {
        elements.graphic.classList.remove('idle-anim'); elements.eyes.style.display = 'none'; elements.sleepZzz.style.display = 'block';
