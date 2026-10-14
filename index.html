@@ -222,16 +222,19 @@
   <div id="ar-hud" class="fixed inset-0 z-50 pointer-events-none flex-col justify-between p-4">
     <div class="w-full flex flex-col items-center space-y-2 mt-2">
       <div id="arStatusBanner" class="px-4 py-2.5 rounded-xl bg-black/80 border-2 border-emerald-400 text-emerald-300 text-[10px] sm:text-xs text-center shadow-lg max-w-xs leading-relaxed">
-        🔍 Move camera slowly to scan floor or table...
+        🔍 Scan floor/table or tap PLACE JIMOTHY below!
       </div>
       <div id="arPalaceCount" class="px-3 py-1 rounded-full bg-black/60 border border-slate-600 text-amber-300 text-[9px]">
-        🏰 PALACE PIECES: <span id="arPieceNum">0</span>
+        🏰 PALACE PIECES: <span id="arPieceNum">0</span> | 🗑️ LOOSE: <span id="arLooseNum">0</span>
       </div>
     </div>
 
-    <div class="w-full flex items-center justify-center space-x-3 mb-6 pointer-events-auto">
-      <button id="arActionBtn" class="px-5 py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 text-slate-950 font-bold text-[10px] sm:text-xs border-2 border-emerald-200 shadow-lg">
+    <div id="arHudButtons" class="w-full flex flex-wrap items-center justify-center gap-2 mb-6 pointer-events-auto">
+      <button id="arActionBtn" class="px-4 py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 text-slate-950 font-bold text-[10px] sm:text-xs border-2 border-emerald-200 shadow-lg">
         📍 PLACE JIMOTHY
+      </button>
+      <button id="arRecenterBtn" class="hidden px-3 py-3 rounded-xl bg-amber-500 active:bg-amber-600 text-slate-950 font-bold text-[10px] sm:text-xs border-2 border-amber-200 shadow-lg">
+        🎯 RE-PLACE
       </button>
       <button id="arExitBtn" class="px-4 py-3 rounded-xl bg-rose-600 active:bg-rose-700 text-white font-bold text-[10px] sm:text-xs border-2 border-rose-300 shadow-lg">
         ✖ EXIT AR
@@ -543,11 +546,16 @@
     
     let hitTestSource = null;
     let hitTestSourceRequested = false;
-    let localReferenceSpace = null;
     let reticle;
     let arController;
     let jimothyPlaced = false;
     let lastSurfaceDetected = false;
+    let lastARActionTime = 0;
+
+    // Track latest XR viewer pose from WebXR frame directly so fallback placement is 100% accurate
+    const latestViewerPos = new THREE.Vector3(0, 0, 0);
+    const latestViewerQuat = new THREE.Quaternion();
+    let hasValidViewerPose = false;
     
     let arPalaceGroup; 
     const trashPieces = []; // Stacked palace pieces
@@ -561,7 +569,7 @@
       targetTrash: null,
       carriedTrash: null,
       walkCycle: 0,
-      speed: 0.42,
+      speed: 0.45,
       palaceCenter: new THREE.Vector3(0, 0, -0.25),
       lastTime: 0
     };
@@ -573,9 +581,16 @@
       if (banner && msg) banner.textContent = msg;
       const countEl = document.getElementById('arPieceNum');
       if (countEl) countEl.textContent = trashPieces.length;
+      const looseEl = document.getElementById('arLooseNum');
+      if (looseEl) looseEl.textContent = uncollectedTrash.length + (arAI.carriedTrash ? 1 : 0);
       const actionBtn = document.getElementById('arActionBtn');
       if (actionBtn) {
         actionBtn.textContent = jimothyPlaced ? '🗑️ DROP TRASH' : '📍 PLACE JIMOTHY';
+      }
+      const recenterBtn = document.getElementById('arRecenterBtn');
+      if (recenterBtn) {
+        if (jimothyPlaced) recenterBtn.classList.remove('hidden');
+        else recenterBtn.classList.add('hidden');
       }
     }
 
@@ -689,6 +704,7 @@
         group.userData.height = 0.12;
       }
 
+      group.traverse(obj => { obj.frustumCulled = false; });
       return group;
     }
 
@@ -717,11 +733,11 @@
         
         arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.2);
+        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.4);
         light.position.set(0.5, 1, 0.25);
         arScene.add(light);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
         directionalLight.position.set(1, 2, 1);
         arScene.add(directionalLight);
 
@@ -732,7 +748,7 @@
         arRenderer.xr.setReferenceSpaceType('local');
         arContainer.appendChild(arRenderer.domElement);
 
-        // Configure WebXR session with hit-test and optional dom-overlay for our interactive AR HUD
+        // Configure WebXR session with hit-test and dom-overlay for our interactive AR HUD
         const sessionInit = {
           requiredFeatures: ['local'],
           optionalFeatures: ['hit-test', 'dom-overlay'],
@@ -740,6 +756,14 @@
         };
         const arBtn = ARButton.createButton(arRenderer, sessionInit);
         document.body.appendChild(arBtn);
+
+        // Prevent taps on the HUD buttons from firing duplicate WebXR select events
+        const hudButtons = document.getElementById('arHudButtons');
+        if (hudButtons) {
+          hudButtons.addEventListener('beforexrselect', (e) => {
+            e.preventDefault();
+          });
+        }
 
         arController = arRenderer.xr.getController(0);
         arController.addEventListener('select', onSelect);
@@ -762,6 +786,7 @@
 
         arPalaceGroup = new THREE.Group();
         arPalaceGroup.visible = false;
+        arPalaceGroup.frustumCulled = false;
         arScene.add(arPalaceGroup);
         
         arRenderer.xr.addEventListener('sessionstart', async () => {
@@ -769,9 +794,9 @@
             document.body.classList.add('ar-active');
             hitTestSourceRequested = true;
             hitTestSource = null;
-            localReferenceSpace = null;
             jimothyPlaced = false;
             lastSurfaceDetected = false;
+            hasValidViewerPose = false;
             
             arPalaceGroup.visible = false;
             trashPieces.forEach(p => arPalaceGroup.remove(p));
@@ -788,7 +813,7 @@
             arAI.lastTime = performance.now();
             if (arModel) arModel.visible = false;
 
-            updateARHudStatus("🔍 Move camera slowly to scan floor or table...");
+            updateARHudStatus("🔍 Scan floor/table or tap PLACE JIMOTHY below!");
 
             // Request Hit-Test source immediately when session starts
             const session = arRenderer.xr.getSession();
@@ -796,16 +821,14 @@
               session.addEventListener('end', () => {
                 hitTestSourceRequested = false;
                 hitTestSource = null;
-                localReferenceSpace = null;
               });
 
               try {
                 const viewerSpace = await session.requestReferenceSpace('viewer');
-                localReferenceSpace = await session.requestReferenceSpace('local');
                 if (typeof session.requestHitTestSource === 'function') {
                   hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
                 } else {
-                  updateARHudStatus("📌 Surface scan unavailable. Tap PLACE JIMOTHY to spawn in front of you!");
+                  updateARHudStatus("📌 Tap PLACE JIMOTHY below to spawn him in front of you!");
                 }
               } catch (err) {
                 console.warn("Hit-test setup fallback:", err);
@@ -821,7 +844,6 @@
             arPalaceGroup.visible = false;
             hitTestSourceRequested = false;
             hitTestSource = null;
-            localReferenceSpace = null;
             if (arAI.carriedTrash && arModel) {
                 arModel.remove(arAI.carriedTrash);
                 arAI.carriedTrash = null;
@@ -838,6 +860,7 @@
                  arModel = gltf.scene;
                  arModel.scale.set(0.1, 0.1, 0.1);
                  arModel.visible = false;
+                 arModel.traverse(obj => { obj.frustumCulled = false; });
                  arScene.add(arModel);
               },
               undefined,
@@ -884,63 +907,89 @@
         } catch(e) {}
     }
 
-    // Computes a fallback placement matrix 1.2m in front of the camera if hit-testing hasn't locked onto a plane yet
+    // Computes an accurate placement matrix using either the locked reticle or the XR viewer's real-time pose
     function getPlacementMatrix() {
         if (reticle && reticle.visible) {
-            return reticle.matrix;
+            return reticle.matrix.clone();
         }
+
         const fallbackMatrix = new THREE.Matrix4();
         const camPos = new THREE.Vector3();
         const camQuat = new THREE.Quaternion();
-        arCamera.getWorldPosition(camPos);
-        arCamera.getWorldQuaternion(camQuat);
 
-        const forward = new THREE.Vector3(0, 0, -1.1).applyQuaternion(camQuat);
+        if (hasValidViewerPose) {
+            camPos.copy(latestViewerPos);
+            camQuat.copy(latestViewerQuat);
+        } else if (arRenderer && arRenderer.xr && arRenderer.xr.isPresenting) {
+            const xrCam = arRenderer.xr.getCamera();
+            xrCam.getWorldPosition(camPos);
+            xrCam.getWorldQuaternion(camQuat);
+        } else {
+            arCamera.getWorldPosition(camPos);
+            arCamera.getWorldQuaternion(camQuat);
+        }
+
+        // Project 1.0m in front of the user's phone
+        const forward = new THREE.Vector3(0, 0, -1.0).applyQuaternion(camQuat);
         const targetPos = new THREE.Vector3(
             camPos.x + forward.x,
             jimothyPlaced ? arPalaceGroup.position.y : (camPos.y - 0.35),
             camPos.z + forward.z
         );
-        if (jimothyPlaced) {
-            targetPos.x += (Math.random() - 0.5) * 0.35;
-            targetPos.z += (Math.random() - 0.5) * 0.35;
-        }
+
         fallbackMatrix.makeTranslation(targetPos.x, targetPos.y, targetPos.z);
         return fallbackMatrix;
     }
 
-    function triggerARPlacementOrDrop(useFallbackIfNoReticle = false) {
+    function placeJimothyAtMatrix(targetMatrix) {
+        arPalaceGroup.position.setFromMatrixPosition(targetMatrix);
+
+        const camPos = hasValidViewerPose ? latestViewerPos.clone() : new THREE.Vector3();
+        if (!hasValidViewerPose && arRenderer && arRenderer.xr) {
+            arRenderer.xr.getCamera().getWorldPosition(camPos);
+        }
+        camPos.y = arPalaceGroup.position.y;
+        arPalaceGroup.lookAt(camPos);
+
+        // Critical: immediately update arPalaceGroup's world matrix so worldToLocal works for trash drops!
+        arPalaceGroup.updateMatrixWorld(true);
+
+        if (arModel.parent !== arPalaceGroup) {
+            arPalaceGroup.add(arModel);
+        }
+        arModel.position.set(0, 0, 0);
+        arModel.rotation.set(0, 0, 0);
+        arModel.visible = true;
+        arPalaceGroup.visible = true;
+        jimothyPlaced = true;
+
+        arAI.state = 'IDLE';
+        arAI.timer = 0.8;
+        arAI.lastTime = performance.now();
+    }
+
+    function triggerARPlacementOrDrop() {
         if (!isARMode || !arModel) return;
-        if (!reticle.visible && !useFallbackIfNoReticle) return;
+
+        // Debounce so DOM overlay click and WebXR select don't double-fire on the same tap
+        const now = performance.now();
+        if (now - lastARActionTime < 180) return;
+        lastARActionTime = now;
 
         const targetMatrix = getPlacementMatrix();
 
         if (!jimothyPlaced) {
-            arPalaceGroup.position.setFromMatrixPosition(targetMatrix);
-            
-            const cameraPos = new THREE.Vector3();
-            arCamera.getWorldPosition(cameraPos);
-            cameraPos.y = arPalaceGroup.position.y; 
-            arPalaceGroup.lookAt(cameraPos);
-            
-            arModel.position.set(0, 0, 0); 
-            arModel.rotation.set(0, 0, 0);
-            arPalaceGroup.add(arModel);
-            
-            arPalaceGroup.visible = true;
-            arModel.visible = true;
-            jimothyPlaced = true;
-            arAI.state = 'IDLE';
-            arAI.timer = 1.0;
-            arAI.lastTime = performance.now();
-            
+            placeJimothyAtMatrix(targetMatrix);
+
+            if (trashPieces.length === 0) {
+                loadARPalace();
+            }
+
             haptic([50, 50, 100]);
             sound.fanfare();
-            setLog("Jimothy placed! Tap anywhere to drop trash for him to build with.");
+            setLog("Jimothy placed! Tap screen or DROP TRASH to build his palace.");
             showReaction("MY DOMAIN!");
-            
-            loadARPalace();
-            updateARHudStatus("🦝 Jimothy is active! Tap screen or DROP TRASH to feed his fortress.");
+            updateARHudStatus("🦝 Jimothy is here! Tap screen or DROP TRASH to feed his fortress.");
         } else {
             dropTrashForJimothy(targetMatrix);
             haptic(30);
@@ -952,20 +1001,43 @@
     }
 
     function onSelect() {
-        triggerARPlacementOrDrop(false);
+        // Allow tapping anywhere on the AR view to place Jimothy or drop trash
+        triggerARPlacementOrDrop();
     }
 
     function dropTrashForJimothy(worldMatrix) {
         const type = AR_TRASH_TYPES[Math.floor(Math.random() * AR_TRASH_TYPES.length)];
         const mesh = createDetailedTrashMesh(type);
 
-        mesh.position.setFromMatrixPosition(worldMatrix);
-        arPalaceGroup.worldToLocal(mesh.position);
+        // Ensure arPalaceGroup matrixWorld is current before converting world -> local
+        arPalaceGroup.updateMatrixWorld(true);
+
+        if (reticle && reticle.visible) {
+            mesh.position.setFromMatrixPosition(worldMatrix);
+            arPalaceGroup.worldToLocal(mesh.position);
+            // Clamp within a 1.8m radius of Jimothy's palace so it's always reachable
+            const dist = Math.hypot(mesh.position.x, mesh.position.z);
+            if (dist > 1.8) {
+                mesh.position.x = (mesh.position.x / dist) * 1.2;
+                mesh.position.z = (mesh.position.z / dist) * 1.2;
+            }
+        } else {
+            // If no surface reticle is locked, scatter the dropped trash right around Jimothy in local space
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 0.25 + Math.random() * 0.35;
+            mesh.position.set(
+                Math.cos(angle) * radius,
+                0,
+                Math.sin(angle) * radius
+            );
+        }
+
         mesh.position.y = 0; // Snap cleanly to Jimothy's horizontal ground plane
         mesh.rotation.y = Math.random() * Math.PI * 2;
 
         arPalaceGroup.add(mesh);
         uncollectedTrash.push(mesh);
+        updateARHudStatus();
 
         // Immediately alert Jimothy's AI if he is idle or wandering
         if (arAI.state === 'IDLE' || arAI.state === 'WANDER') {
@@ -1057,6 +1129,7 @@
       arModel.add(tailGroup);
 
       arModel.userData.parts = { headGroup, armL, armR, legL, legR, tailGroup, crown };
+      arModel.traverse(obj => { obj.frustumCulled = false; });
       arModel.visible = false;
       arScene.add(arModel);
     }
@@ -1183,7 +1256,7 @@
           }
           setLog(`Jimothy stacked a ${placedMesh.userData.trashType.replace('_', ' ')} onto his palace!`);
           showReaction("🏰 PALACE UPGRADE!");
-          updateARHudStatus(`🏰 Jimothy stacked a ${placedMesh.userData.trashType.replace('_', ' ')}! Tap to drop more.`);
+          updateARHudStatus(`🏰 Stacked ${placedMesh.userData.trashType.replace('_', ' ')}! Tap to drop more.`);
 
           arAI.state = 'CELEBRATE';
           arAI.timer = 0.9;
@@ -1215,8 +1288,20 @@
     function renderAR(timestamp, frame) {
       if (arRenderer && arScene && arCamera) {
           if (frame) {
-              const referenceSpace = localReferenceSpace || arRenderer.xr.getReferenceSpace();
+              const referenceSpace = arRenderer.xr.getReferenceSpace();
               const session = arRenderer.xr.getSession();
+
+              // Capture exact viewer pose every frame so fallback placement is always right in front of the user
+              if (referenceSpace) {
+                  const viewerPose = frame.getViewerPose(referenceSpace);
+                  if (viewerPose && viewerPose.transform) {
+                      const p = viewerPose.transform.position;
+                      const o = viewerPose.transform.orientation;
+                      latestViewerPos.set(p.x, p.y, p.z);
+                      latestViewerQuat.set(o.x, o.y, o.z, o.w);
+                      hasValidViewerPose = true;
+                  }
+              }
 
               if (session && hitTestSourceRequested === false) {
                   hitTestSourceRequested = true;
@@ -1239,7 +1324,7 @@
                           reticle.matrix.fromArray(pose.transform.matrix);
                           if (!lastSurfaceDetected && !jimothyPlaced) {
                               lastSurfaceDetected = true;
-                              updateARHudStatus("✅ Surface detected! Tap screen or PLACE JIMOTHY.");
+                              updateARHudStatus("✅ Surface locked! Tap screen or PLACE JIMOTHY.");
                           }
                       }
                   } else {
@@ -1261,10 +1346,20 @@
 
     initAR();
 
-    // Hook up AR HUD Action & Exit Buttons
+    // Hook up AR HUD Action, Re-Center, & Exit Buttons
     document.getElementById('arActionBtn').addEventListener('click', (e) => {
       e.stopPropagation();
-      triggerARPlacementOrDrop(true);
+      triggerARPlacementOrDrop();
+    });
+
+    document.getElementById('arRecenterBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isARMode || !arModel) return;
+      const targetMatrix = getPlacementMatrix();
+      placeJimothyAtMatrix(targetMatrix);
+      haptic([30, 40, 60]);
+      sound.beep();
+      updateARHudStatus("🎯 Re-centered Jimothy & his palace here!");
     });
 
     document.getElementById('arExitBtn').addEventListener('click', (e) => {
