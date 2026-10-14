@@ -75,6 +75,20 @@
       pointer-events: none !important;
     }
 
+    body.ar-active #ARButton {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      z-index: 9999 !important;
+      bottom: 24px !important;
+      background-color: var(--brand-text) !important;
+      color: var(--shell-bg-3) !important;
+      font-family: 'Press Start 2P', monospace !important;
+      font-size: 10px !important;
+      border: 2px solid var(--shell-bg-3) !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.6) !important;
+    }
+
     .lcd-screen {
       background-color: var(--lcd-bg);
       color: var(--lcd-pixel);
@@ -716,6 +730,9 @@
             uncollectedTrash.forEach(p => arPalaceGroup.remove(p));
             uncollectedTrash.length = 0;
 
+            if (arAI.carriedTrash && arModel) {
+                arModel.remove(arAI.carriedTrash);
+            }
             arAI.state = 'IDLE';
             arAI.targetTrash = null;
             arAI.carriedTrash = null;
@@ -728,6 +745,14 @@
             document.body.classList.remove('ar-active');
             reticle.visible = false;
             arPalaceGroup.visible = false;
+            hitTestSourceRequested = false;
+            hitTestSource = null;
+            if (arAI.carriedTrash && arModel) {
+                arModel.remove(arAI.carriedTrash);
+                arAI.carriedTrash = null;
+            }
+            arAI.targetTrash = null;
+            arAI.state = 'IDLE';
         });
 
         if (AR_MODEL_URL) {
@@ -825,7 +850,7 @@
 
         mesh.position.setFromMatrixPosition(worldMatrix);
         arPalaceGroup.worldToLocal(mesh.position);
-        mesh.position.y = Math.max(0, mesh.position.y);
+        mesh.position.y = 0; // Snap cleanly to Jimothy's horizontal ground plane
         mesh.rotation.y = Math.random() * Math.PI * 2;
 
         arPalaceGroup.add(mesh);
@@ -1082,13 +1107,15 @@
               const session = arRenderer.xr.getSession();
 
               if (hitTestSourceRequested === false) {
-                  session.requestReferenceSpace('viewer').then((referenceSpace) => {
-                      session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+                  hitTestSourceRequested = true;
+                  session.requestReferenceSpace('viewer').then((viewerSpace) => {
+                      session.requestHitTestSource({ space: viewerSpace }).then((source) => {
                           hitTestSource = source;
                       });
                   });
-                  session.requestReferenceSpace('local').then((referenceSpace) => {
-                      hitTestSourceRequested = true;
+                  session.addEventListener('end', () => {
+                      hitTestSourceRequested = false;
+                      hitTestSource = null;
                   });
               }
 
@@ -1848,6 +1875,12 @@
         trashPieces.forEach(p => arPalaceGroup.remove(p));
         uncollectedTrash.forEach(p => arPalaceGroup.remove(p));
       }
+      if (arAI.carriedTrash && arModel) {
+        arModel.remove(arAI.carriedTrash);
+      }
+      arAI.carriedTrash = null;
+      arAI.targetTrash = null;
+      arAI.state = 'IDLE';
       trashPieces.length = 0;
       uncollectedTrash.length = 0;
 
@@ -1934,7 +1967,7 @@
     }
 
     function throwTrashAtScreen() {
-      if (pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || pet.isSleeping || isAnimatingThrow) return;
+      if (isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || pet.isSleeping || isAnimatingThrow) return;
       isAnimatingThrow = true;
       const projectiles = [ { emoji: "🍅", type: "splat", log: "a rotten tomato" }, { emoji: "🪨", type: "crack", log: "a heavy rock" }, { emoji: "🥦", type: "glitch", log: "cursed broccoli" }, { emoji: "🥫", type: "crack", log: "a soup can" } ];
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
@@ -2007,7 +2040,7 @@
 
     setInterval(() => {
       pet.ageMinutes += 1;
-      const isBusy = pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen;
+      const isBusy = isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen;
 
       if (pet.isSleeping) {
         pet.energy = Math.min(100, pet.energy + 8); gainXp(1); 
