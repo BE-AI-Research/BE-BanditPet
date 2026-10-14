@@ -61,33 +61,40 @@
       margin: 0;
     }
 
-    /* Clean WebXR AR Compositing Rules */
+    html.ar-active,
     body.ar-active {
       overflow: hidden !important;
       background: transparent !important;
+      background-color: transparent !important;
     }
     
     body.ar-active .toy-shell-container {
       display: none !important;
     }
+
+    body.ar-active #ar-container {
+      pointer-events: auto !important;
+    }
+
+    #ar-container canvas {
+      display: block;
+      width: 100vw !important;
+      height: 100vh !important;
+    }
+
+    #ar-hud {
+      display: none;
+      background: transparent !important;
+    }
+
+    body.ar-active #ar-hud {
+      display: flex !important;
+    }
     
-    /* Keep Three.js ARButton hidden in 2D mode, but visible as 'STOP AR' during active AR */
     #ARButton {
       position: absolute !important;
       opacity: 0 !important;
       pointer-events: none !important;
-    }
-
-    body.ar-active #ARButton {
-      opacity: 1 !important;
-      pointer-events: auto !important;
-      z-index: 9999 !important;
-      background-color: var(--brand-text) !important;
-      color: var(--shell-bg-3) !important;
-      font-family: 'Press Start 2P', monospace !important;
-      font-size: 10px !important;
-      border: 2px solid var(--shell-bg-3) !important;
-      border-radius: 8px !important;
     }
 
     .lcd-screen {
@@ -218,7 +225,31 @@
 <body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 select-none text-slate-100 overflow-x-hidden">
 
   <!-- Container for the Three.js AR View -->
-  <div id="ar-container" class="absolute inset-0 z-0 pointer-events-none"></div>
+  <div id="ar-container" class="fixed inset-0 w-screen h-screen z-0 pointer-events-none"></div>
+
+  <!-- WebXR AR Overlay HUD (Shown during active AR session) -->
+  <div id="ar-hud" class="fixed inset-0 z-50 pointer-events-none flex-col justify-between p-4">
+    <div class="w-full flex flex-col items-center space-y-2 mt-2">
+      <div id="arStatusBanner" class="px-4 py-2.5 rounded-xl bg-black/80 border-2 border-emerald-400 text-emerald-300 text-[10px] sm:text-xs text-center shadow-lg max-w-xs leading-relaxed">
+        🔍 Scan floor/table or tap PLACE JIMOTHY below!
+      </div>
+      <div id="arPalaceCount" class="px-3 py-1 rounded-full bg-black/60 border border-slate-600 text-amber-300 text-[9px]">
+        🏰 PALACE PIECES: <span id="arPieceNum">0</span> | 🗑️ LOOSE: <span id="arLooseNum">0</span>
+      </div>
+    </div>
+
+    <div id="arHudButtons" class="w-full flex flex-wrap items-center justify-center gap-2 mb-6 pointer-events-auto">
+      <button id="arActionBtn" class="px-4 py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 text-slate-950 font-bold text-[10px] sm:text-xs border-2 border-emerald-200 shadow-lg">
+        📍 PLACE JIMOTHY
+      </button>
+      <button id="arRecenterBtn" class="hidden px-3 py-3 rounded-xl bg-amber-500 active:bg-amber-600 text-slate-950 font-bold text-[10px] sm:text-xs border-2 border-amber-200 shadow-lg">
+        🎯 RE-PLACE
+      </button>
+      <button id="arExitBtn" class="px-4 py-3 rounded-xl bg-rose-600 active:bg-rose-700 text-white font-bold text-[10px] sm:text-xs border-2 border-rose-300 shadow-lg">
+        ✖ EXIT AR
+      </button>
+    </div>
+  </div>
 
   <!-- The main UI wrapped in a container so we can hide it during AR -->
   <div class="relative w-full h-[95vh] min-h-[650px] max-w-[600px] flex flex-col items-center toy-shell-container z-10">
@@ -527,8 +558,16 @@
     let reticle;
     let arController;
     let jimothyPlaced = false;
+    let lastSurfaceDetected = false;
+    let lastARActionTime = 0;
+
+    // Track latest XR viewer pose from WebXR frame directly so fallback placement is 100% accurate
+    const latestViewerPos = new THREE.Vector3(0, 0, 0);
+    const latestViewerQuat = new THREE.Quaternion();
+    let hasValidViewerPose = false;
     
     let arPalaceGroup; 
+    let arAnchorRing;
     const trashPieces = []; // Stacked palace pieces
     const uncollectedTrash = []; // Loose trash waiting for Jimothy AI to pick up
 
@@ -540,12 +579,30 @@
       targetTrash: null,
       carriedTrash: null,
       walkCycle: 0,
-      speed: 0.35,
-      palaceCenter: new THREE.Vector3(0, 0, -0.22),
+      speed: 0.45,
+      palaceCenter: new THREE.Vector3(0, 0, -0.25),
       lastTime: 0
     };
 
     const AR_TRASH_TYPES = ['pizza_box', 'soda_can', 'crt_tv', 'traffic_cone', 'tire', 'milk_crate'];
+
+    function updateARHudStatus(msg) {
+      const banner = document.getElementById('arStatusBanner');
+      if (banner && msg) banner.textContent = msg;
+      const countEl = document.getElementById('arPieceNum');
+      if (countEl) countEl.textContent = trashPieces.length;
+      const looseEl = document.getElementById('arLooseNum');
+      if (looseEl) looseEl.textContent = uncollectedTrash.length + (arAI.carriedTrash ? 1 : 0);
+      const actionBtn = document.getElementById('arActionBtn');
+      if (actionBtn) {
+        actionBtn.textContent = jimothyPlaced ? '🗑️ DROP TRASH' : '📍 PLACE JIMOTHY';
+      }
+      const recenterBtn = document.getElementById('arRecenterBtn');
+      if (recenterBtn) {
+        if (jimothyPlaced) recenterBtn.classList.remove('hidden');
+        else recenterBtn.classList.add('hidden');
+      }
+    }
 
     function createDetailedTrashMesh(type) {
       const group = new THREE.Group();
@@ -553,103 +610,130 @@
 
       if (type === 'pizza_box') {
         const box = new THREE.Mesh(
-          new THREE.BoxGeometry(0.16, 0.025, 0.16),
-          new THREE.MeshLambertMaterial({ color: 0xd2b48c })
+          new THREE.BoxGeometry(0.18, 0.03, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.65, metalness: 0.05 })
         );
-        box.position.y = 0.0125;
+        box.position.y = 0.015;
         const stain = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.045, 0.045, 0.027, 12),
-          new THREE.MeshLambertMaterial({ color: 0xb22222 })
+          new THREE.CylinderGeometry(0.05, 0.05, 0.032, 12),
+          new THREE.MeshStandardMaterial({ color: 0xb22222, roughness: 0.5, metalness: 0.05 })
         );
-        stain.position.set(0.015, 0.013, -0.01);
-        group.add(box, stain);
-        group.userData.height = 0.025;
+        stain.position.set(0.02, 0.015, -0.01);
+        const crust = new THREE.Mesh(
+          new THREE.TorusGeometry(0.035, 0.008, 6, 12, Math.PI * 0.8),
+          new THREE.MeshStandardMaterial({ color: 0xcd853f, roughness: 0.6 })
+        );
+        crust.rotation.x = Math.PI / 2;
+        crust.position.set(-0.02, 0.032, 0.02);
+        group.add(box, stain, crust);
+        group.userData.height = 0.03;
       } else if (type === 'soda_can') {
         const body = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.03, 0.03, 0.09, 14),
-          new THREE.MeshLambertMaterial({ color: 0xef4444 })
+          new THREE.CylinderGeometry(0.035, 0.035, 0.1, 14),
+          new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.2, roughness: 0.35 })
         );
-        body.position.y = 0.045;
+        body.position.y = 0.05;
         const rimTop = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.028, 0.03, 0.01, 14),
-          new THREE.MeshLambertMaterial({ color: 0xe2e8f0 })
+          new THREE.CylinderGeometry(0.033, 0.035, 0.01, 14),
+          new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.25, roughness: 0.3 })
         );
-        rimTop.position.y = 0.09;
-        group.add(body, rimTop);
-        group.userData.height = 0.09;
+        rimTop.position.y = 0.1;
+        const stripe = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.0355, 0.0355, 0.02, 14),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+        );
+        stripe.position.y = 0.055;
+        group.add(body, rimTop, stripe);
+        group.userData.height = 0.1;
       } else if (type === 'crt_tv') {
         const casing = new THREE.Mesh(
-          new THREE.BoxGeometry(0.14, 0.12, 0.12),
-          new THREE.MeshLambertMaterial({ color: 0x52525b })
+          new THREE.BoxGeometry(0.16, 0.14, 0.14),
+          new THREE.MeshStandardMaterial({ color: 0x52525b, roughness: 0.6 })
         );
-        casing.position.y = 0.06;
+        casing.position.y = 0.07;
         const screen = new THREE.Mesh(
-          new THREE.BoxGeometry(0.1, 0.08, 0.01),
-          new THREE.MeshLambertMaterial({ color: 0x34d399, emissive: 0x065f46 })
+          new THREE.BoxGeometry(0.12, 0.09, 0.01),
+          new THREE.MeshStandardMaterial({ color: 0x34d399, roughness: 0.2, emissive: 0x065f46 })
         );
-        screen.position.set(-0.01, 0.06, 0.06);
-        group.add(casing, screen);
-        group.userData.height = 0.12;
+        screen.position.set(-0.01, 0.07, 0.07);
+        const antGeo = new THREE.CylinderGeometry(0.003, 0.003, 0.1, 6);
+        const antMat = new THREE.MeshStandardMaterial({ color: 0xe4e4e7, roughness: 0.3 });
+        const antL = new THREE.Mesh(antGeo, antMat);
+        antL.position.set(-0.03, 0.17, 0);
+        antL.rotation.z = 0.4;
+        const antR = new THREE.Mesh(antGeo, antMat);
+        antR.position.set(0.03, 0.17, 0);
+        antR.rotation.z = -0.4;
+        group.add(casing, screen, antL, antR);
+        group.userData.height = 0.14;
       } else if (type === 'traffic_cone') {
         const base = new THREE.Mesh(
-          new THREE.BoxGeometry(0.11, 0.015, 0.11),
-          new THREE.MeshLambertMaterial({ color: 0x27272a })
+          new THREE.BoxGeometry(0.13, 0.018, 0.13),
+          new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.8 })
         );
-        base.position.y = 0.0075;
+        base.position.y = 0.009;
         const cone = new THREE.Mesh(
-          new THREE.ConeGeometry(0.04, 0.13, 14),
-          new THREE.MeshLambertMaterial({ color: 0xff6600 })
+          new THREE.ConeGeometry(0.05, 0.15, 14),
+          new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.4, emissive: 0x331100 })
         );
-        cone.position.y = 0.07;
+        cone.position.y = 0.085;
         const collar = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.02, 0.03, 0.025, 14),
-          new THREE.MeshLambertMaterial({ color: 0xffffff })
+          new THREE.CylinderGeometry(0.025, 0.035, 0.03, 14),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 })
         );
-        collar.position.y = 0.08;
+        collar.position.y = 0.1;
         group.add(base, cone, collar);
-        group.userData.height = 0.14;
+        group.userData.height = 0.16;
       } else if (type === 'tire') {
         const torus = new THREE.Mesh(
-          new THREE.TorusGeometry(0.055, 0.024, 10, 18),
-          new THREE.MeshLambertMaterial({ color: 0x27272a })
+          new THREE.TorusGeometry(0.07, 0.03, 10, 18),
+          new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.75 })
         );
         torus.rotation.x = Math.PI / 2;
-        torus.position.y = 0.024;
+        torus.position.y = 0.03;
         const hub = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.035, 0.035, 0.018, 12),
-          new THREE.MeshLambertMaterial({ color: 0xd4d4d8 })
+          new THREE.CylinderGeometry(0.045, 0.045, 0.02, 12),
+          new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.2, roughness: 0.3 })
         );
-        hub.position.y = 0.024;
+        hub.position.y = 0.03;
         group.add(torus, hub);
-        group.userData.height = 0.05;
+        group.userData.height = 0.06;
       } else {
         // milk_crate
         const crate = new THREE.Mesh(
-          new THREE.BoxGeometry(0.12, 0.1, 0.12),
-          new THREE.MeshLambertMaterial({ color: 0x3b82f6 })
+          new THREE.BoxGeometry(0.14, 0.12, 0.14),
+          new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.5 })
         );
-        crate.position.y = 0.05;
-        group.add(crate);
-        group.userData.height = 0.1;
+        crate.position.y = 0.06;
+        const inner = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.11, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 })
+        );
+        inner.position.y = 0.07;
+        group.add(crate, inner);
+        group.userData.height = 0.12;
       }
 
+      group.scale.set(1.25, 1.25, 1.25);
+      group.traverse(obj => { obj.frustumCulled = false; });
       return group;
     }
 
-    function computeNextPalaceSlot(index) {
+    function computeNextPalaceSlot(index, pieceHeight) {
+      // Builds a multi-tiered architectural Trash Fortress around arAI.palaceCenter
       const tierCapacity = 6;
       const tier = Math.floor(index / tierCapacity);
       const slotInTier = index % tierCapacity;
-      const radius = Math.max(0.04, 0.15 - tier * 0.03);
+      const radius = Math.max(0.04, 0.18 - tier * 0.035);
       const angle = (slotInTier / tierCapacity) * Math.PI * 2 + (tier * 0.5);
 
       const x = arAI.palaceCenter.x + Math.cos(angle) * radius;
       const z = arAI.palaceCenter.z + Math.sin(angle) * radius;
-      const y = tier * 0.085 + (slotInTier % 2) * 0.01;
+      const y = tier * 0.1 + (slotInTier % 2) * 0.015;
 
       return {
         pos: new THREE.Vector3(x, y, z),
-        rotY: angle + Math.PI / 2 + (Math.random() - 0.5) * 0.3
+        rotY: angle + Math.PI / 2 + (Math.random() - 0.5) * 0.4
       };
     }
 
@@ -658,51 +742,88 @@
         const arContainer = document.getElementById('ar-container');
         arScene = new THREE.Scene();
         
-        arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+        arCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
+        // High-visibility lighting for Three.js r160 physical lighting pipeline
+        const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
         arScene.add(ambientLight);
 
-        const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1.5);
+        const light = new THREE.HemisphereLight(0xffffff, 0xcbd5e1, 2.5);
         light.position.set(0.5, 1, 0.25);
         arScene.add(light);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        directionalLight.position.set(1, 2, 1);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        directionalLight.position.set(1, 3, 2);
         arScene.add(directionalLight);
 
-        arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        arRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+        arRenderer.setClearColor(0x000000, 0);
         arRenderer.setPixelRatio(window.devicePixelRatio);
         arRenderer.setSize(window.innerWidth, window.innerHeight);
         arRenderer.xr.enabled = true;
+        arRenderer.xr.setReferenceSpaceType('local');
         arContainer.appendChild(arRenderer.domElement);
 
-        // Standard WebXR ARButton with hit-test (no domOverlay to block compositing)
-        const arBtn = ARButton.createButton(arRenderer, { requiredFeatures: ['hit-test'] });
+        // Configure WebXR session with hit-test and dom-overlay for our interactive AR HUD
+        const sessionInit = {
+          requiredFeatures: ['local'],
+          optionalFeatures: ['hit-test', 'dom-overlay'],
+          domOverlay: { root: document.getElementById('ar-hud') }
+        };
+        const arBtn = ARButton.createButton(arRenderer, sessionInit);
         document.body.appendChild(arBtn);
+
+        // Prevent taps on the HUD buttons from firing duplicate WebXR select events
+        const hudButtons = document.getElementById('arHudButtons');
+        if (hudButtons) {
+          hudButtons.addEventListener('beforexrselect', (e) => {
+            e.preventDefault();
+          });
+        }
 
         arController = arRenderer.xr.getController(0);
         arController.addEventListener('select', onSelect);
         arScene.add(arController);
 
-        reticle = new THREE.Mesh(
-          new THREE.RingGeometry(0.12, 0.16, 32).rotateX(-Math.PI / 2),
+        // Build a clear targeting reticle with inner dot
+        reticle = new THREE.Group();
+        const outerRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.11, 0.15, 32).rotateX(-Math.PI / 2),
           new THREE.MeshBasicMaterial({ color: 0x6ee7b7, side: THREE.DoubleSide })
         );
+        const innerDot = new THREE.Mesh(
+          new THREE.CircleGeometry(0.03, 16).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+        );
+        reticle.add(outerRing, innerDot);
         reticle.matrixAutoUpdate = false;
         reticle.visible = false;
         arScene.add(reticle);
 
         arPalaceGroup = new THREE.Group();
         arPalaceGroup.visible = false;
+        arPalaceGroup.frustumCulled = false;
         arScene.add(arPalaceGroup);
+
+        // Subtle glowing ground base ring under Jimothy's domain so his anchor is always unmistakable
+        arAnchorRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.18, 0.22, 32).rotateX(-Math.PI / 2),
+          new THREE.MeshBasicMaterial({ color: 0x34d399, side: THREE.DoubleSide, transparent: true, opacity: 0.65 })
+        );
+        arAnchorRing.position.y = 0.003;
+        arAnchorRing.frustumCulled = false;
+        arPalaceGroup.add(arAnchorRing);
         
-        arRenderer.xr.addEventListener('sessionstart', () => {
+        arRenderer.xr.addEventListener('sessionstart', async () => {
             isARMode = true;
+            document.documentElement.classList.add('ar-active');
             document.body.classList.add('ar-active');
-            hitTestSourceRequested = false;
+            arRenderer.setClearColor(0x000000, 0);
+            hitTestSourceRequested = true;
             hitTestSource = null;
             jimothyPlaced = false;
+            lastSurfaceDetected = false;
+            hasValidViewerPose = false;
             
             arPalaceGroup.visible = false;
             trashPieces.forEach(p => arPalaceGroup.remove(p));
@@ -718,10 +839,34 @@
             arAI.carriedTrash = null;
             arAI.lastTime = performance.now();
             if (arModel) arModel.visible = false;
+
+            updateARHudStatus("🔍 Scan floor/table or tap PLACE JIMOTHY below!");
+
+            // Request Hit-Test source immediately when session starts
+            const session = arRenderer.xr.getSession();
+            if (session) {
+              session.addEventListener('end', () => {
+                hitTestSourceRequested = false;
+                hitTestSource = null;
+              });
+
+              try {
+                const viewerSpace = await session.requestReferenceSpace('viewer');
+                if (typeof session.requestHitTestSource === 'function') {
+                  hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+                } else {
+                  updateARHudStatus("📌 Tap PLACE JIMOTHY below to spawn him in front of you!");
+                }
+              } catch (err) {
+                console.warn("Hit-test setup fallback:", err);
+                updateARHudStatus("📌 Tap PLACE JIMOTHY below to spawn him in front of you!");
+              }
+            }
         });
         
         arRenderer.xr.addEventListener('sessionend', () => {
             isARMode = false;
+            document.documentElement.classList.remove('ar-active');
             document.body.classList.remove('ar-active');
             reticle.visible = false;
             arPalaceGroup.visible = false;
@@ -741,8 +886,9 @@
               AR_MODEL_URL,
               function (gltf) {
                  arModel = gltf.scene;
-                 arModel.scale.set(0.1, 0.1, 0.1);
+                 arModel.scale.set(0.15, 0.15, 0.15);
                  arModel.visible = false;
+                 arModel.traverse(obj => { obj.frustumCulled = false; });
                  arPalaceGroup.add(arModel);
               },
               undefined,
@@ -768,6 +914,7 @@
             rx: mesh.rotation.x, ry: mesh.rotation.y, rz: mesh.rotation.z
         }));
         localStorage.setItem('jima_ar_palace', JSON.stringify(data));
+        updateARHudStatus();
     }
 
     function loadARPalace() {
@@ -784,76 +931,166 @@
                 trashPieces.push(mesh);
             });
             setLog(`Loaded ${data.length} saved palace pieces!`);
+            updateARHudStatus();
         } catch(e) {}
     }
 
-    function onSelect() {
-        if (!reticle.visible || !arModel) return;
+    // Computes an accurate placement matrix using either the locked reticle or the XR viewer's real-time pose
+    function getPlacementMatrix() {
+        if (reticle && reticle.visible) {
+            return reticle.matrix.clone();
+        }
+
+        const fallbackMatrix = new THREE.Matrix4();
+        const camPos = new THREE.Vector3();
+        const camQuat = new THREE.Quaternion();
+
+        if (hasValidViewerPose) {
+            camPos.copy(latestViewerPos);
+            camQuat.copy(latestViewerQuat);
+        } else if (arRenderer && arRenderer.xr && arRenderer.xr.isPresenting) {
+            const xrCam = arRenderer.xr.getCamera();
+            xrCam.getWorldPosition(camPos);
+            xrCam.getWorldQuaternion(camQuat);
+        } else {
+            arCamera.getWorldPosition(camPos);
+            arCamera.getWorldQuaternion(camQuat);
+        }
+
+        // Project 0.85m horizontally in front of the user's phone so Jimothy is always upright and in view
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
+        forward.y = 0;
+        if (forward.lengthSq() < 0.001) {
+            forward.set(0, 0, -1);
+        } else {
+            forward.normalize();
+        }
+
+        const targetPos = new THREE.Vector3(
+            camPos.x + forward.x * 0.85,
+            jimothyPlaced ? arPalaceGroup.position.y : (camPos.y - 0.25),
+            camPos.z + forward.z * 0.85
+        );
+
+        fallbackMatrix.makeTranslation(targetPos.x, targetPos.y, targetPos.z);
+        return fallbackMatrix;
+    }
+
+    function placeJimothyAtMatrix(targetMatrix) {
+        const pos = new THREE.Vector3();
+        pos.setFromMatrixPosition(targetMatrix);
+
+        // Guard against NaN coordinates
+        if (isNaN(pos.x) || isNaN(pos.y) || isNaN(pos.z)) {
+            pos.set(0, -0.25, -0.85);
+        }
+        arPalaceGroup.position.copy(pos);
+
+        const camPos = hasValidViewerPose ? latestViewerPos.clone() : new THREE.Vector3();
+        if (!hasValidViewerPose && arRenderer && arRenderer.xr) {
+            arRenderer.xr.getCamera().getWorldPosition(camPos);
+        }
+
+        // Safe horizontal yaw rotation so Jimothy's +Z front faces the user without NaN quaternion risks
+        const dx = camPos.x - arPalaceGroup.position.x;
+        const dz = camPos.z - arPalaceGroup.position.z;
+        if (Math.hypot(dx, dz) > 0.001) {
+            arPalaceGroup.rotation.set(0, Math.atan2(dx, dz), 0);
+        } else {
+            arPalaceGroup.rotation.set(0, 0, 0);
+        }
+
+        if (arModel.parent !== arPalaceGroup) {
+            arPalaceGroup.add(arModel);
+        }
+        arModel.position.set(0, 0, 0);
+        arModel.rotation.set(0, 0, 0);
+        arModel.visible = true;
+        arPalaceGroup.visible = true;
+        arPalaceGroup.traverse(obj => { obj.frustumCulled = false; });
+
+        // Critical: immediately update arPalaceGroup's world matrix so worldToLocal works for trash drops!
+        arPalaceGroup.updateMatrixWorld(true);
+        jimothyPlaced = true;
+
+        arAI.state = 'IDLE';
+        arAI.timer = 0.8;
+        arAI.lastTime = performance.now();
+    }
+
+    function triggerARPlacementOrDrop() {
+        if (!isARMode || !arModel) return;
+
+        // Debounce so DOM overlay click and WebXR select don't double-fire on the same tap
+        const now = performance.now();
+        if (now - lastARActionTime < 180) return;
+        lastARActionTime = now;
+
+        const targetMatrix = getPlacementMatrix();
 
         if (!jimothyPlaced) {
-            // First Tap on detected surface: Place Jimothy and his Palace Group
-            arPalaceGroup.position.setFromMatrixPosition(reticle.matrix);
+            placeJimothyAtMatrix(targetMatrix);
 
-            const cameraPos = new THREE.Vector3();
-            arCamera.getWorldPosition(cameraPos);
-            const dx = cameraPos.x - arPalaceGroup.position.x;
-            const dz = cameraPos.z - arPalaceGroup.position.z;
-            if (Math.hypot(dx, dz) > 0.001) {
-                arPalaceGroup.rotation.set(0, Math.atan2(dx, dz), 0);
-            } else {
-                arPalaceGroup.rotation.set(0, 0, 0);
+            if (trashPieces.length === 0) {
+                loadARPalace();
             }
-
-            arModel.position.set(0, 0, 0);
-            arModel.rotation.set(0, 0, 0);
-            arPalaceGroup.add(arModel);
-
-            arPalaceGroup.visible = true;
-            arModel.visible = true;
-            arPalaceGroup.updateMatrixWorld(true);
-            jimothyPlaced = true;
-
-            arAI.state = 'IDLE';
-            arAI.timer = 0.8;
-            arAI.lastTime = performance.now();
 
             haptic([50, 50, 100]);
             sound.fanfare();
-            setLog("Jimothy placed! Tap surfaces to drop trash for his palace.");
+            setLog("Jimothy placed! Tap screen or DROP TRASH to build his palace.");
             showReaction("MY DOMAIN!");
-
-            loadARPalace();
+            updateARHudStatus("🦝 Jimothy is here! Tap screen or DROP TRASH to feed his fortress.");
         } else {
-            // Subsequent Taps on detected surface: Drop trash for Jimothy to collect
-            dropTrashForJimothy(reticle.matrix);
+            dropTrashForJimothy(targetMatrix);
             haptic(30);
             sound.thud();
             setLog("Dropped trash! Jimothy is scurrying over to build...");
             showReaction("OOOH TRASH!");
+            updateARHudStatus("🗑️ Trash dropped! Watch Jimothy collect and stack it.");
         }
+    }
+
+    function onSelect() {
+        // Allow tapping anywhere on the AR view to place Jimothy or drop trash
+        triggerARPlacementOrDrop();
     }
 
     function dropTrashForJimothy(worldMatrix) {
         const type = AR_TRASH_TYPES[Math.floor(Math.random() * AR_TRASH_TYPES.length)];
         const mesh = createDetailedTrashMesh(type);
 
+        // Ensure arPalaceGroup matrixWorld is current before converting world -> local
         arPalaceGroup.updateMatrixWorld(true);
-        mesh.position.setFromMatrixPosition(worldMatrix);
-        arPalaceGroup.worldToLocal(mesh.position);
 
-        // Keep dropped trash on the same surface plane and within reasonable walking range
-        mesh.position.y = 0;
-        const dist = Math.hypot(mesh.position.x, mesh.position.z);
-        if (dist > 1.5 || isNaN(dist)) {
+        if (reticle && reticle.visible) {
+            mesh.position.setFromMatrixPosition(worldMatrix);
+            arPalaceGroup.worldToLocal(mesh.position);
+            // Clamp within a 1.5m radius of Jimothy's palace so it's always reachable & visible
+            const dist = Math.hypot(mesh.position.x, mesh.position.z);
+            if (dist > 1.5 || isNaN(dist)) {
+                const angle = Math.random() * Math.PI * 2;
+                mesh.position.x = Math.cos(angle) * 0.4;
+                mesh.position.z = Math.sin(angle) * 0.4;
+            }
+        } else {
+            // If no surface reticle is locked, scatter the dropped trash right around Jimothy in local space
             const angle = Math.random() * Math.PI * 2;
-            mesh.position.x = Math.cos(angle) * 0.35;
-            mesh.position.z = Math.sin(angle) * 0.35;
+            const radius = 0.22 + Math.random() * 0.28;
+            mesh.position.set(
+                Math.cos(angle) * radius,
+                0,
+                Math.sin(angle) * radius
+            );
         }
+
+        mesh.position.y = 0; // Snap cleanly to Jimothy's horizontal ground plane
         mesh.rotation.y = Math.random() * Math.PI * 2;
 
         arPalaceGroup.add(mesh);
         uncollectedTrash.push(mesh);
+        updateARHudStatus();
 
+        // Immediately alert Jimothy's AI if he is idle or wandering
         if (arAI.state === 'IDLE' || arAI.state === 'WANDER') {
             arAI.targetTrash = uncollectedTrash.shift();
             arAI.state = 'SEEK_TRASH';
@@ -863,89 +1100,91 @@
 
     function createProceduralRaccoon() {
       arModel = new THREE.Group();
-      const matBody = new THREE.MeshLambertMaterial({ color: 0x6b7280 });
-      const matDark = new THREE.MeshLambertMaterial({ color: 0x1f2937 });
-      const matBelly = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
-      const matWhite = new THREE.MeshLambertMaterial({ color: 0xffffff });
-      const matGold = new THREE.MeshLambertMaterial({ color: 0xfbbf24 });
+      const matBody = new THREE.MeshStandardMaterial({ color: 0x71717a, roughness: 0.65, metalness: 0.05 });
+      const matDark = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.6, metalness: 0.05 });
+      const matBelly = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.6, metalness: 0.05 });
+      const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, emissive: 0x222222 });
+      const matGold = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.25, roughness: 0.3, emissive: 0x451a03 });
       
-      // Torso (calibrated 1.0x scale: ~22cm tall tabletop raccoon)
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.17, 0.13), matBody);
-      body.position.y = 0.11;
+      // Torso
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.16), matBody);
+      body.position.y = 0.14;
       arModel.add(body);
       
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.13, 0.015), matBelly);
-      belly.position.set(0, 0.1, 0.065);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.17, 0.02), matBelly);
+      belly.position.set(0, 0.13, 0.08);
       arModel.add(belly);
 
       // Head Group
       const headGroup = new THREE.Group();
-      headGroup.position.set(0, 0.24, 0.015);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.11, 0.12), matBody);
+      headGroup.position.set(0, 0.31, 0.02);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.14, 0.15), matBody);
       headGroup.add(head);
       
-      const mask = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.045, 0.125), matDark);
-      mask.position.y = 0.008;
+      const mask = new THREE.Mesh(new THREE.BoxGeometry(0.175, 0.055, 0.155), matDark);
+      mask.position.y = 0.01;
       headGroup.add(mask);
 
       // Eyes
-      const eyeGeo = new THREE.BoxGeometry(0.022, 0.022, 0.01);
-      const pupilGeo = new THREE.BoxGeometry(0.011, 0.011, 0.012);
-      const eyeL = new THREE.Mesh(eyeGeo, matWhite); eyeL.position.set(-0.032, 0.01, 0.062);
-      const eyeR = new THREE.Mesh(eyeGeo, matWhite); eyeR.position.set(0.032, 0.01, 0.062);
-      const pupL = new THREE.Mesh(pupilGeo, matDark); pupL.position.set(-0.03, 0.01, 0.065);
-      const pupR = new THREE.Mesh(pupilGeo, matDark); pupR.position.set(0.03, 0.01, 0.065);
+      const eyeGeo = new THREE.BoxGeometry(0.028, 0.028, 0.01);
+      const pupilGeo = new THREE.BoxGeometry(0.014, 0.014, 0.012);
+      const eyeL = new THREE.Mesh(eyeGeo, matWhite); eyeL.position.set(-0.04, 0.012, 0.078);
+      const eyeR = new THREE.Mesh(eyeGeo, matWhite); eyeR.position.set(0.04, 0.012, 0.078);
+      const pupL = new THREE.Mesh(pupilGeo, matDark); pupL.position.set(-0.038, 0.012, 0.08);
+      const pupR = new THREE.Mesh(pupilGeo, matDark); pupR.position.set(0.038, 0.012, 0.08);
       headGroup.add(eyeL, eyeR, pupL, pupR);
 
       // Snout & Nose
-      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.04, 0.05), matBelly);
-      snout.position.set(0, -0.02, 0.072);
-      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.016, 0.016), matDark);
-      nose.position.set(0, -0.012, 0.096);
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.06), matBelly);
+      snout.position.set(0, -0.025, 0.09);
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.02, 0.02), matDark);
+      nose.position.set(0, -0.015, 0.12);
       headGroup.add(snout, nose);
 
       // Ears
-      const earGeo = new THREE.ConeGeometry(0.028, 0.055, 4);
-      const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.045, 0.08, 0);
-      const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.045, 0.08, 0);
+      const earGeo = new THREE.ConeGeometry(0.035, 0.07, 4);
+      const earL = new THREE.Mesh(earGeo, matBody); earL.position.set(-0.06, 0.1, 0);
+      const earR = new THREE.Mesh(earGeo, matBody); earR.position.set(0.06, 0.1, 0);
       headGroup.add(earL, earR);
 
       // Optional Emperor Crown
-      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.03, 6), matGold);
-      crown.position.set(0, 0.07, 0);
+      const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.04, 6), matGold);
+      crown.position.set(0, 0.09, 0);
       crown.visible = (typeof pet !== 'undefined' && (pet.stage === 'emperor' || pet.stage === 'deity'));
       headGroup.add(crown);
       arModel.add(headGroup);
 
-      // Articulated Arms & Legs
-      const armGeo = new THREE.BoxGeometry(0.035, 0.085, 0.035);
-      const armL = new THREE.Mesh(armGeo, matDark); armL.position.set(-0.085, 0.125, 0.03);
-      const armR = new THREE.Mesh(armGeo, matDark); armR.position.set(0.085, 0.125, 0.03);
+      // Articulated Arms & Legs for Walking/Carrying
+      const armGeo = new THREE.BoxGeometry(0.045, 0.11, 0.045);
+      const armL = new THREE.Mesh(armGeo, matDark); armL.position.set(-0.11, 0.16, 0.04);
+      const armR = new THREE.Mesh(armGeo, matDark); armR.position.set(0.11, 0.16, 0.04);
       arModel.add(armL, armR);
 
-      const legGeo = new THREE.BoxGeometry(0.042, 0.055, 0.05);
-      const legL = new THREE.Mesh(legGeo, matDark); legL.position.set(-0.042, 0.027, 0.01);
-      const legR = new THREE.Mesh(legGeo, matDark); legR.position.set(0.042, 0.027, 0.01);
+      const legGeo = new THREE.BoxGeometry(0.055, 0.07, 0.065);
+      const legL = new THREE.Mesh(legGeo, matDark); legL.position.set(-0.055, 0.035, 0.01);
+      const legR = new THREE.Mesh(legGeo, matDark); legR.position.set(0.055, 0.035, 0.01);
       arModel.add(legL, legR);
 
       // Striped Tail
       const tailGroup = new THREE.Group();
       for (let i = 0; i < 4; i++) {
         const seg = new THREE.Mesh(
-          new THREE.BoxGeometry(0.055 - i * 0.006, 0.045, 0.055 - i * 0.006),
+          new THREE.BoxGeometry(0.07 - i * 0.008, 0.06, 0.07 - i * 0.008),
           i % 2 === 0 ? matBody : matDark
         );
-        seg.position.y = i * 0.042;
+        seg.position.y = i * 0.055;
         tailGroup.add(seg);
       }
-      tailGroup.position.set(0, 0.045, -0.07);
+      tailGroup.position.set(0, 0.06, -0.09);
       tailGroup.rotation.x = -Math.PI / 3;
       arModel.add(tailGroup);
 
-      arModel.scale.set(1, 1, 1);
+      // Scale Jimothy up slightly so he is super clear and unmistakable in AR
+      arModel.scale.set(1.45, 1.45, 1.45);
       arModel.userData.parts = { headGroup, armL, armR, legL, legR, tailGroup, crown };
+      arModel.traverse(obj => { obj.frustumCulled = false; });
       arModel.visible = false;
-      arScene.add(arModel);
+      arPalaceGroup.add(arModel);
     }
 
     function updateJimothyARAI(dt, time) {
@@ -965,9 +1204,10 @@
           arModel.position.z += (dz / dist) * step;
           arModel.rotation.y = Math.atan2(dx, dz);
 
-          arAI.walkCycle += dt * 16 * speedMult;
-          arModel.position.y = Math.abs(Math.sin(arAI.walkCycle)) * 0.02;
-          arModel.rotation.z = Math.sin(arAI.walkCycle * 0.5) * 0.06;
+          // Scurry limb animation
+          arAI.walkCycle += dt * 18 * speedMult;
+          arModel.position.y = Math.abs(Math.sin(arAI.walkCycle)) * 0.025;
+          arModel.rotation.z = Math.sin(arAI.walkCycle * 0.5) * 0.08;
           if (parts) {
             parts.legL.rotation.x = Math.sin(arAI.walkCycle) * 0.6;
             parts.legR.rotation.x = -Math.sin(arAI.walkCycle) * 0.6;
@@ -1003,7 +1243,7 @@
           arAI.timer -= dt;
           if (arAI.timer <= 0) {
             const angle = Math.random() * Math.PI * 2;
-            const radius = 0.1 + Math.random() * 0.2;
+            const radius = 0.12 + Math.random() * 0.25;
             arAI.targetPos.set(
               arAI.palaceCenter.x + Math.cos(angle) * radius,
               0,
@@ -1029,15 +1269,16 @@
           arAI.state = 'IDLE';
           return;
         }
-        const arrived = moveTowards(arAI.targetTrash.position, 0.05, 1.3);
+        const arrived = moveTowards(arAI.targetTrash.position, 0.06, 1.35);
         if (arrived) {
+          // Pick up the trash object and hold it overhead
           arAI.carriedTrash = arAI.targetTrash;
           arAI.targetTrash = null;
           arModel.add(arAI.carriedTrash);
-          arAI.carriedTrash.position.set(0, 0.3, 0.06);
+          arAI.carriedTrash.position.set(0, 0.38, 0.08);
           arAI.carriedTrash.rotation.set(0, 0, 0);
 
-          const slot = computeNextPalaceSlot(trashPieces.length);
+          const slot = computeNextPalaceSlot(trashPieces.length, arAI.carriedTrash.userData.height || 0.1);
           arAI.targetPos.copy(slot.pos);
           arAI.targetRotY = slot.rotY;
           arAI.state = 'CARRY_TO_PALACE';
@@ -1045,8 +1286,9 @@
           haptic(20);
         }
       } else if (arAI.state === 'CARRY_TO_PALACE') {
-        const arrived = moveTowards(arAI.targetPos, 0.1, 1.1);
+        const arrived = moveTowards(arAI.targetPos, 0.12, 1.1);
         if (arrived && arAI.carriedTrash) {
+          // Place trash onto the Trash Palace structure
           const placedMesh = arAI.carriedTrash;
           arAI.carriedTrash = null;
           arPalaceGroup.add(placedMesh);
@@ -1067,13 +1309,14 @@
           }
           setLog(`Jimothy stacked a ${placedMesh.userData.trashType.replace('_', ' ')} onto his palace!`);
           showReaction("🏰 PALACE UPGRADE!");
+          updateARHudStatus(`🏰 Stacked ${placedMesh.userData.trashType.replace('_', ' ')}! Tap to drop more.`);
 
           arAI.state = 'CELEBRATE';
           arAI.timer = 0.9;
         }
       } else if (arAI.state === 'CELEBRATE') {
         arAI.timer -= dt;
-        arModel.position.y = Math.abs(Math.sin(time * 18)) * 0.06;
+        arModel.position.y = Math.abs(Math.sin(time * 18)) * 0.09;
         arModel.rotation.y += dt * 10;
         if (parts) {
           parts.armL.rotation.x = -Math.PI * 0.8;
@@ -1101,25 +1344,42 @@
               const referenceSpace = arRenderer.xr.getReferenceSpace();
               const session = arRenderer.xr.getSession();
 
-              if (hitTestSourceRequested === false) {
-                  session.requestReferenceSpace('viewer').then((viewerSpace) => {
-                      session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-                          hitTestSource = source;
-                      });
-                  });
-                  session.addEventListener('end', () => {
-                      hitTestSourceRequested = false;
-                      hitTestSource = null;
-                  });
+              // Capture exact viewer pose every frame so fallback placement is always right in front of the user
+              if (referenceSpace) {
+                  const viewerPose = frame.getViewerPose(referenceSpace);
+                  if (viewerPose && viewerPose.transform) {
+                      const p = viewerPose.transform.position;
+                      const o = viewerPose.transform.orientation;
+                      latestViewerPos.set(p.x, p.y, p.z);
+                      latestViewerQuat.set(o.x, o.y, o.z, o.w);
+                      hasValidViewerPose = true;
+                  }
+              }
+
+              if (session && hitTestSourceRequested === false) {
                   hitTestSourceRequested = true;
+                  session.requestReferenceSpace('viewer').then((viewerSpace) => {
+                      if (typeof session.requestHitTestSource === 'function') {
+                          session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+                              hitTestSource = source;
+                          }).catch(() => {});
+                      }
+                  }).catch(() => {});
               }
 
               if (hitTestSource && referenceSpace) {
                   const hitTestResults = frame.getHitTestResults(hitTestSource);
                   if (hitTestResults.length > 0) {
                       const hit = hitTestResults[0];
-                      reticle.visible = true;
-                      reticle.matrix.fromArray(hit.getPose(referenceSpace).transform.matrix);
+                      const pose = hit.getPose(referenceSpace);
+                      if (pose) {
+                          reticle.visible = true;
+                          reticle.matrix.fromArray(pose.transform.matrix);
+                          if (!lastSurfaceDetected && !jimothyPlaced) {
+                              lastSurfaceDetected = true;
+                              updateARHudStatus("✅ Surface locked! Tap screen or PLACE JIMOTHY.");
+                          }
+                      }
                   } else {
                       reticle.visible = false;
                   }
@@ -1139,14 +1399,56 @@
 
     initAR();
 
-    document.getElementById('arToggleBtn').addEventListener('click', () => {
-       const webxrButton = document.getElementById('ARButton');
-       if (webxrButton) {
-           haptic(15);
-           sound.beep();
-           webxrButton.click();
-       } else {
-           setLog("AR not supported on this device.");
+    // Hook up AR HUD Action, Re-Center, & Exit Buttons
+    document.getElementById('arActionBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerARPlacementOrDrop();
+    });
+
+    document.getElementById('arRecenterBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isARMode || !arModel) return;
+      const targetMatrix = getPlacementMatrix();
+      placeJimothyAtMatrix(targetMatrix);
+      haptic([30, 40, 60]);
+      sound.beep();
+      updateARHudStatus("🎯 Re-centered Jimothy & his palace here!");
+    });
+
+    document.getElementById('arExitBtn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const session = arRenderer && arRenderer.xr ? arRenderer.xr.getSession() : null;
+      if (session) {
+        session.end();
+      } else {
+        document.documentElement.classList.remove('ar-active');
+        document.body.classList.remove('ar-active');
+        isARMode = false;
+      }
+    });
+
+    document.getElementById('arToggleBtn').addEventListener('click', async () => {
+       haptic(15);
+       sound.beep();
+       if (!navigator.xr) {
+           setLog("WebXR not available in this browser/device.");
+           showReaction("NO WEBXR!");
+           return;
+       }
+       try {
+           const supported = await navigator.xr.isSessionSupported('immersive-ar');
+           if (!supported) {
+               setLog("AR not supported on this device.");
+               showReaction("NO AR!");
+               return;
+           }
+           const webxrButton = document.getElementById('ARButton');
+           if (webxrButton) {
+               webxrButton.click();
+           }
+       } catch (err) {
+           setLog("AR blocked by permissions or iframe policy.");
+           showReaction("AR BLOCKED!");
        }
     });
 
@@ -1853,6 +2155,7 @@
     }
     
     function performReset() {
+      // Clear active timers and states BEFORE overwriting the pet object
       if (miniGameInterval) clearInterval(miniGameInterval);
       if (heistInterval) clearInterval(heistInterval);
       if (dreamInterval) clearInterval(dreamInterval);
@@ -1861,6 +2164,7 @@
       document.getElementById('miniGameScreen').classList.add('hidden');
       document.getElementById('miniGameScreen').classList.remove('flex');
 
+      // Wipe 2D and 3D AR persistence
       localStorage.removeItem(STATE_KEY);
       localStorage.removeItem('jima_ar_palace');
       if (arPalaceGroup) {
