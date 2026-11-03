@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jima-Gotchi: Pocket-sized Raccoon Virtual "Pet Terrorist"</title>
   
   <!-- Google tag (gtag.js) -->
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
   
-  <!-- Import map for Three.js and WebXR ARButton -->
+  <!-- Import map for Three.js -->
   <script type="importmap">
     {
       "imports": {
@@ -220,7 +220,8 @@
 
   <!-- WebXR AR Overlay HUD (Shown during active AR session) -->
   <div id="ar-hud" class="fixed inset-0 z-50 pointer-events-none flex-col justify-between p-4">
-    <div class="w-full flex flex-col items-center space-y-2 mt-2">
+    <div id="arTapSurface" class="fixed inset-0 z-0 pointer-events-auto"></div>
+    <div class="relative z-10 w-full flex flex-col items-center space-y-2 mt-2 pointer-events-none">
       <div id="arStatusBanner" class="px-4 py-2.5 rounded-xl bg-black/80 border-2 border-emerald-400 text-emerald-300 text-[10px] sm:text-xs text-center shadow-lg max-w-xs leading-relaxed">
         🔍 Scan floor/table or tap PLACE JIMOTHY below!
       </div>
@@ -229,7 +230,7 @@
       </div>
     </div>
 
-    <div id="arHudButtons" class="w-full flex flex-wrap items-center justify-center gap-2 mb-6 pointer-events-auto">
+    <div id="arHudButtons" class="relative z-10 w-full flex flex-wrap items-center justify-center gap-2 mb-6 pointer-events-auto">
       <button id="arActionBtn" class="px-4 py-3 rounded-xl bg-emerald-500 active:bg-emerald-600 text-slate-950 font-bold text-[10px] sm:text-xs border-2 border-emerald-200 shadow-lg">
         📍 PLACE JIMOTHY
       </button>
@@ -502,19 +503,19 @@
             <div class="absolute w-full h-[33%] bg-gray-800 rounded-sm shadow-[inset_-2px_-2px_4px_rgba(0,0,0,0.5),inset_2px_2px_4px_rgba(255,255,255,0.1)] border border-gray-900"></div>
             <div class="absolute w-[25%] h-[25%] bg-gray-700 rounded-full shadow-inner opacity-40"></div>
           </div>
-          <button id="dpadUp" class="absolute top-0 left-1/2 -translate-x-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-t-sm cursor-pointer"></button>
-          <button id="dpadDown" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-b-sm cursor-pointer"></button>
-          <button id="dpadLeft" class="absolute left-0 top-1/2 -translate-y-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-l-sm cursor-pointer"></button>
-          <button id="dpadRight" class="absolute right-0 top-1/2 -translate-y-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-r-sm cursor-pointer"></button>
+          <button id="dpadUp" aria-label="D-Pad Up" title="Up (ArrowUp)" class="absolute top-0 left-1/2 -translate-x-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-t-sm cursor-pointer"></button>
+          <button id="dpadDown" aria-label="D-Pad Down" title="Down (ArrowDown)" class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-b-sm cursor-pointer"></button>
+          <button id="dpadLeft" aria-label="D-Pad Left" title="Left (ArrowLeft)" class="absolute left-0 top-1/2 -translate-y-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-l-sm cursor-pointer"></button>
+          <button id="dpadRight" aria-label="D-Pad Right" title="Right (ArrowRight)" class="absolute right-0 top-1/2 -translate-y-1/2 w-[33%] h-[33%] z-20 active:bg-white/10 rounded-r-sm cursor-pointer"></button>
         </div>
 
         <div class="flex space-x-4 sm:space-x-6 rotate-[-15deg] mt-8 sm:mt-12 mr-2">
           <div class="flex flex-col items-center">
-            <button id="btnB" class="w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-full bg-rose-600 border-b-4 border-rose-900 active:border-b-0 active:translate-y-1 active:bg-rose-700 flex items-center justify-center text-rose-200 font-extrabold text-xl sm:text-2xl shadow-[0_5px_10px_rgba(0,0,0,0.5)] transition-all">B</button>
+            <button id="btnB" aria-label="B Button (Raid / Back)" title="B: Raid / Back (B or 2)" class="w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-full bg-rose-600 border-b-4 border-rose-900 active:border-b-0 active:translate-y-1 active:bg-rose-700 flex items-center justify-center text-rose-200 font-extrabold text-xl sm:text-2xl shadow-[0_5px_10px_rgba(0,0,0,0.5)] transition-all">B</button>
             <span class="text-[10px] sm:text-[11px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">RAID</span>
           </div>
           <div class="flex flex-col items-center -mt-8 sm:-mt-10">
-            <button id="btnA" class="w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-full bg-rose-600 border-b-4 border-rose-900 active:border-b-0 active:translate-y-1 active:bg-rose-700 flex items-center justify-center text-rose-200 font-extrabold text-xl sm:text-2xl shadow-[0_5px_10px_rgba(0,0,0,0.5)] transition-all">A</button>
+            <button id="btnA" aria-label="A Button (Feed / Select)" title="A: Feed / Confirm (A or 1)" class="w-14 h-14 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-full bg-rose-600 border-b-4 border-rose-900 active:border-b-0 active:translate-y-1 active:bg-rose-700 flex items-center justify-center text-rose-200 font-extrabold text-xl sm:text-2xl shadow-[0_5px_10px_rgba(0,0,0,0.5)] transition-all">A</button>
             <span class="text-[10px] sm:text-[11px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">FEED</span>
           </div>
         </div>
@@ -522,11 +523,11 @@
 
       <div class="w-full mt-6 sm:mt-8 mb-4 flex justify-center space-x-6 shrink-0">
         <div class="flex flex-col items-center rotate-[-15deg]">
-          <button id="btnSelect" class="w-16 h-4 sm:w-20 sm:h-5 md:w-24 md:h-6 bg-gray-800 rounded-full shadow-inner border-t border-gray-600 active:bg-gray-900 active:scale-95 transition-transform"></button>
+          <button id="btnSelect" aria-label="Select Button (Nap / Throw)" title="Select: Nap / Throw (Shift)" class="w-16 h-4 sm:w-20 sm:h-5 md:w-24 md:h-6 bg-gray-800 rounded-full shadow-inner border-t border-gray-600 active:bg-gray-900 active:scale-95 transition-transform"></button>
           <span class="text-[9px] sm:text-[10px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">NAP</span>
         </div>
         <div class="flex flex-col items-center rotate-[-15deg]">
-          <button id="btnStart" class="w-16 h-4 sm:w-20 sm:h-5 md:w-24 md:h-6 bg-gray-800 rounded-full shadow-inner border-t border-gray-600 active:bg-gray-900 active:scale-95 transition-transform"></button>
+          <button id="btnStart" aria-label="Start Button (Lint / Flee)" title="Start: Lint / Flee (Space)" class="w-16 h-4 sm:w-20 sm:h-5 md:w-24 md:h-6 bg-gray-800 rounded-full shadow-inner border-t border-gray-600 active:bg-gray-900 active:scale-95 transition-transform"></button>
           <span class="text-[9px] sm:text-[10px] mt-1.5 font-bold tracking-widest" style="color: var(--brand-text);">LINT</span>
         </div>
       </div>
@@ -536,18 +537,20 @@
 
   <script type="module">
     import * as THREE from 'three';
-    import { ARButton } from 'three/addons/webxr/ARButton.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
     const AR_MODEL_URL = ""; 
 
     let arCamera, arScene, arRenderer, arModel;
     let isARMode = false;
+    let isARSimulation = false;
+    let currentXRSession = null;
     
     let hitTestSource = null;
     let hitTestSourceRequested = false;
     let reticle;
     let arController;
+    let simFloorGrid = null;
     let jimothyPlaced = false;
     let lastSurfaceDetected = false;
     let lastARActionTime = 0;
@@ -575,6 +578,17 @@
     };
 
     const AR_TRASH_TYPES = ['pizza_box', 'soda_can', 'crt_tv', 'traffic_cone', 'tire', 'milk_crate'];
+
+    function disposeObject3D(obj) {
+      if (!obj) return;
+      obj.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      });
+    }
 
     function updateARHudStatus(msg) {
       const banner = document.getElementById('arStatusBanner');
@@ -713,17 +727,96 @@
       const tierCapacity = 6;
       const tier = Math.floor(index / tierCapacity);
       const slotInTier = index % tierCapacity;
-      const radius = Math.max(0.04, 0.18 - tier * 0.035);
-      const angle = (slotInTier / tierCapacity) * Math.PI * 2 + (tier * 0.5);
+      const radius = Math.max(0.05, 0.19 - tier * 0.03);
+      const angle = (slotInTier / tierCapacity) * Math.PI * 2 + (tier * 0.52);
+
+      // Compute cumulative height from lower tiers so pieces stack cleanly
+      let baseY = 0;
+      for (let t = 0; t < tier; t++) {
+        const belowIdx = t * tierCapacity + slotInTier;
+        const belowMesh = trashPieces[belowIdx];
+        baseY += (belowMesh && belowMesh.userData.height) ? belowMesh.userData.height * 0.85 : 0.095;
+      }
 
       const x = arAI.palaceCenter.x + Math.cos(angle) * radius;
       const z = arAI.palaceCenter.z + Math.sin(angle) * radius;
-      const y = tier * 0.1 + (slotInTier % 2) * 0.015;
+      const y = baseY;
 
       return {
         pos: new THREE.Vector3(x, y, z),
-        rotY: angle + Math.PI / 2 + (Math.random() - 0.5) * 0.4
+        rotY: angle + Math.PI / 2 + (Math.random() - 0.5) * 0.35
       };
+    }
+
+    function resetARSessionEntities() {
+      jimothyPlaced = false;
+      lastSurfaceDetected = false;
+      hasValidViewerPose = false;
+      if (reticle) reticle.visible = false;
+      if (arPalaceGroup) {
+        arPalaceGroup.visible = false;
+        trashPieces.forEach(p => { arPalaceGroup.remove(p); disposeObject3D(p); });
+        trashPieces.length = 0;
+        uncollectedTrash.forEach(p => { arPalaceGroup.remove(p); disposeObject3D(p); });
+        uncollectedTrash.length = 0;
+      }
+      if (arAI.carriedTrash && arModel) {
+        arModel.remove(arAI.carriedTrash);
+        disposeObject3D(arAI.carriedTrash);
+      }
+      arAI.state = 'IDLE';
+      arAI.targetTrash = null;
+      arAI.carriedTrash = null;
+      arAI.lastTime = performance.now();
+      if (arModel) arModel.visible = false;
+    }
+
+    function startARSimulationFallback(reasonMsg) {
+      if (!arRenderer || !arScene || !arCamera) return;
+      isARMode = true;
+      isARSimulation = true;
+      document.body.classList.add('ar-active');
+      resetARSessionEntities();
+
+      arRenderer.setClearColor(0x0d1512, 0.96);
+      if (!simFloorGrid) {
+        simFloorGrid = new THREE.GridHelper(4, 20, 0x6ee7b7, 0x1e4a38);
+        simFloorGrid.position.set(0, -0.35, -1.0);
+        arScene.add(simFloorGrid);
+      }
+      simFloorGrid.visible = true;
+
+      arCamera.position.set(0, 0.15, 0.35);
+      arCamera.lookAt(0, -0.25, -1.0);
+      arCamera.updateMatrixWorld(true);
+
+      arRenderer.setAnimationLoop(renderAR);
+      updateARHudStatus(reasonMsg || "🌐 3D Preview Mode (No WebXR camera): Tap PLACE JIMOTHY!");
+    }
+
+    function stopARMode() {
+      isARMode = false;
+      isARSimulation = false;
+      if (arRenderer) {
+        arRenderer.setAnimationLoop(null);
+        arRenderer.setClearColor(0x000000, 0);
+      }
+      if (simFloorGrid) simFloorGrid.visible = false;
+      document.body.classList.remove('ar-active');
+      if (reticle) reticle.visible = false;
+      if (arPalaceGroup) arPalaceGroup.visible = false;
+      hitTestSourceRequested = false;
+      if (hitTestSource) {
+        try { hitTestSource.cancel(); } catch (_) {}
+        hitTestSource = null;
+      }
+      if (arAI.carriedTrash && arModel) {
+        arModel.remove(arAI.carriedTrash);
+        disposeObject3D(arAI.carriedTrash);
+        arAI.carriedTrash = null;
+      }
+      arAI.targetTrash = null;
+      arAI.state = 'IDLE';
     }
 
     function initAR() {
@@ -748,15 +841,6 @@
         arRenderer.xr.setReferenceSpaceType('local');
         arContainer.appendChild(arRenderer.domElement);
 
-        // Configure WebXR session with hit-test and dom-overlay for our interactive AR HUD
-        const sessionInit = {
-          requiredFeatures: ['local'],
-          optionalFeatures: ['hit-test', 'dom-overlay'],
-          domOverlay: { root: document.getElementById('ar-hud') }
-        };
-        const arBtn = ARButton.createButton(arRenderer, sessionInit);
-        document.body.appendChild(arBtn);
-
         // Prevent taps on the HUD buttons from firing duplicate WebXR select events
         const hudButtons = document.getElementById('arHudButtons');
         if (hudButtons) {
@@ -764,6 +848,18 @@
             e.preventDefault();
           });
         }
+
+        // Allow tapping anywhere on the DOM overlay background (or 3D canvas) to place Jimothy / drop trash
+        const tapSurface = document.getElementById('arTapSurface');
+        if (tapSurface) {
+          tapSurface.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerARPlacementOrDrop();
+          });
+        }
+        arRenderer.domElement.addEventListener('click', () => {
+          triggerARPlacementOrDrop();
+        });
 
         arController = arRenderer.xr.getController(0);
         arController.addEventListener('select', onSelect);
@@ -791,36 +887,28 @@
         
         arRenderer.xr.addEventListener('sessionstart', async () => {
             isARMode = true;
+            isARSimulation = false;
+            if (simFloorGrid) simFloorGrid.visible = false;
+            arRenderer.setClearColor(0x000000, 0);
             document.body.classList.add('ar-active');
             hitTestSourceRequested = true;
             hitTestSource = null;
-            jimothyPlaced = false;
-            lastSurfaceDetected = false;
-            hasValidViewerPose = false;
-            
-            arPalaceGroup.visible = false;
-            trashPieces.forEach(p => arPalaceGroup.remove(p));
-            trashPieces.length = 0;
-            uncollectedTrash.forEach(p => arPalaceGroup.remove(p));
-            uncollectedTrash.length = 0;
-
-            if (arAI.carriedTrash && arModel) {
-                arModel.remove(arAI.carriedTrash);
-            }
-            arAI.state = 'IDLE';
-            arAI.targetTrash = null;
-            arAI.carriedTrash = null;
-            arAI.lastTime = performance.now();
-            if (arModel) arModel.visible = false;
+            resetARSessionEntities();
+            arRenderer.setAnimationLoop(renderAR);
 
             updateARHudStatus("🔍 Scan floor/table or tap PLACE JIMOTHY below!");
 
             // Request Hit-Test source immediately when session starts
             const session = arRenderer.xr.getSession();
+            currentXRSession = session;
             if (session) {
               session.addEventListener('end', () => {
                 hitTestSourceRequested = false;
-                hitTestSource = null;
+                if (hitTestSource) {
+                  try { hitTestSource.cancel(); } catch (_) {}
+                  hitTestSource = null;
+                }
+                currentXRSession = null;
               });
 
               try {
@@ -828,28 +916,19 @@
                 if (typeof session.requestHitTestSource === 'function') {
                   hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
                 } else {
+                  hitTestSourceRequested = false;
                   updateARHudStatus("📌 Tap PLACE JIMOTHY below to spawn him in front of you!");
                 }
               } catch (err) {
                 console.warn("Hit-test setup fallback:", err);
+                hitTestSourceRequested = false;
                 updateARHudStatus("📌 Tap PLACE JIMOTHY below to spawn him in front of you!");
               }
             }
         });
         
         arRenderer.xr.addEventListener('sessionend', () => {
-            isARMode = false;
-            document.body.classList.remove('ar-active');
-            reticle.visible = false;
-            arPalaceGroup.visible = false;
-            hitTestSourceRequested = false;
-            hitTestSource = null;
-            if (arAI.carriedTrash && arModel) {
-                arModel.remove(arAI.carriedTrash);
-                arAI.carriedTrash = null;
-            }
-            arAI.targetTrash = null;
-            arAI.state = 'IDLE';
+            stopARMode();
         });
 
         if (AR_MODEL_URL) {
@@ -873,7 +952,6 @@
         }
 
         window.addEventListener('resize', onWindowResize, false);
-        arRenderer.setAnimationLoop(renderAR);
       } catch (e) {
         console.warn("WebXR / AR initialization skipped:", e);
       }
@@ -914,6 +992,11 @@
         }
 
         const fallbackMatrix = new THREE.Matrix4();
+        if (isARSimulation) {
+            fallbackMatrix.makeTranslation(0, -0.35, -1.0);
+            return fallbackMatrix;
+        }
+
         const camPos = new THREE.Vector3();
         const camQuat = new THREE.Quaternion();
 
@@ -929,12 +1012,16 @@
             arCamera.getWorldQuaternion(camQuat);
         }
 
-        // Project 1.0m in front of the user's phone
+        // Project 1.0m horizontally in front of the user's phone so steep downward tilt doesn't bury Jimothy underground
         const forward = new THREE.Vector3(0, 0, -1.0).applyQuaternion(camQuat);
+        forward.y = 0;
+        if (forward.lengthSq() < 0.001) forward.set(0, 0, -1.0);
+        else forward.normalize();
+
         const targetPos = new THREE.Vector3(
-            camPos.x + forward.x,
+            camPos.x + forward.x * 1.0,
             jimothyPlaced ? arPalaceGroup.position.y : (camPos.y - 0.35),
-            camPos.z + forward.z
+            camPos.z + forward.z * 1.0
         );
 
         fallbackMatrix.makeTranslation(targetPos.x, targetPos.y, targetPos.z);
@@ -945,11 +1032,16 @@
         arPalaceGroup.position.setFromMatrixPosition(targetMatrix);
 
         const camPos = hasValidViewerPose ? latestViewerPos.clone() : new THREE.Vector3();
-        if (!hasValidViewerPose && arRenderer && arRenderer.xr) {
-            arRenderer.xr.getCamera().getWorldPosition(camPos);
+        if (!hasValidViewerPose) {
+            if (arRenderer && arRenderer.xr && arRenderer.xr.isPresenting) {
+                arRenderer.xr.getCamera().getWorldPosition(camPos);
+            } else if (arCamera) {
+                arCamera.getWorldPosition(camPos);
+            }
         }
-        camPos.y = arPalaceGroup.position.y;
-        arPalaceGroup.lookAt(camPos);
+        const dx = camPos.x - arPalaceGroup.position.x;
+        const dz = camPos.z - arPalaceGroup.position.z;
+        arPalaceGroup.rotation.set(0, Math.atan2(dx, dz), 0);
 
         // Critical: immediately update arPalaceGroup's world matrix so worldToLocal works for trash drops!
         arPalaceGroup.updateMatrixWorld(true);
@@ -1364,37 +1456,55 @@
 
     document.getElementById('arExitBtn').addEventListener('click', (e) => {
       e.stopPropagation();
-      const session = arRenderer && arRenderer.xr ? arRenderer.xr.getSession() : null;
+      const session = (arRenderer && arRenderer.xr && arRenderer.xr.getSession()) || currentXRSession;
       if (session) {
-        session.end();
+        session.end().catch(() => stopARMode());
       } else {
-        document.body.classList.remove('ar-active');
-        isARMode = false;
+        stopARMode();
       }
     });
 
     document.getElementById('arToggleBtn').addEventListener('click', async () => {
        haptic(15);
        sound.beep();
+       if (!arRenderer) initAR();
        if (!navigator.xr) {
-           setLog("WebXR not available in this browser/device.");
-           showReaction("NO WEBXR!");
+           setLog("WebXR unavailable — launching 3D AR Preview Mode!");
+           showReaction("🕶️ 3D MODE!");
+           startARSimulationFallback("🌐 3D Preview Mode (WebXR unavailable on device): Tap PLACE JIMOTHY!");
            return;
        }
        try {
            const supported = await navigator.xr.isSessionSupported('immersive-ar');
            if (!supported) {
-               setLog("AR not supported on this device.");
-               showReaction("NO AR!");
+               setLog("Immersive AR unsupported — launching 3D Preview Mode!");
+               showReaction("🕶️ 3D MODE!");
+               startARSimulationFallback("🌐 3D Preview Mode (No AR camera): Tap PLACE JIMOTHY!");
                return;
            }
-           const webxrButton = document.getElementById('ARButton');
-           if (webxrButton) {
-               webxrButton.click();
+           // Request WebXR session directly inside the user gesture with progressive fallbacks
+           let session = null;
+           const domOverlayRoot = document.getElementById('ar-hud');
+           try {
+               session = await navigator.xr.requestSession('immersive-ar', {
+                   requiredFeatures: ['local'],
+                   optionalFeatures: ['hit-test', 'dom-overlay'],
+                   domOverlay: domOverlayRoot ? { root: domOverlayRoot } : undefined
+               });
+           } catch (primaryErr) {
+               console.warn("Primary WebXR session init failed, retrying minimal immersive-ar:", primaryErr);
+               session = await navigator.xr.requestSession('immersive-ar', {
+                   optionalFeatures: ['local', 'hit-test', 'dom-overlay'],
+                   domOverlay: domOverlayRoot ? { root: domOverlayRoot } : undefined
+               });
            }
+           currentXRSession = session;
+           await arRenderer.xr.setSession(session);
        } catch (err) {
-           setLog("AR blocked by permissions or iframe policy.");
-           showReaction("AR BLOCKED!");
+           console.warn("WebXR session start fallback to 3D Preview:", err);
+           setLog("AR camera blocked/unavailable — opened 3D Preview Mode!");
+           showReaction("🕶️ 3D MODE!");
+           startARSimulationFallback("🌐 3D Preview Mode (Camera permission/WebXR blocked): Tap PLACE JIMOTHY!");
        }
     });
 
@@ -1586,16 +1696,33 @@
     let isGeneratingAI = false;
     let isAnimatingThrow = false;
     let reactionTimeout = null;
-    let battle = { active: false, enemy: null, hp: 100, maxHp: 100, enemyHp: 100, enemyMaxHp: 100, isBlocking: false };
+    let battleTimeout = null;
+    let battle = { active: false, enemy: null, hp: 100, maxHp: 100, enemyHp: 100, enemyMaxHp: 100, isBlocking: false, turnLocked: false };
+
+    function isValidHttpsUrl(str) {
+      try {
+        const u = new URL(str);
+        return u.protocol === 'https:';
+      } catch (_) {
+        return false;
+      }
+    }
 
     // Google Chat Webhook Integration
     let chatWebhookUrl = localStorage.getItem('jima_chat_webhook') || "";
+    if (chatWebhookUrl && !isValidHttpsUrl(chatWebhookUrl)) chatWebhookUrl = "";
     document.getElementById('webhookToggleBtn').addEventListener('click', () => {
       haptic(15);
       sound.beep();
-      const url = prompt("Enter a Google Chat Webhook URL to let Jimothy spam your team (Leave blank to disable):", chatWebhookUrl);
+      const url = prompt("Enter a Google Chat Webhook URL (https://...) to let Jimothy spam your team (Leave blank to disable):", chatWebhookUrl);
       if (url !== null) {
-        chatWebhookUrl = url.trim();
+        const trimmed = url.trim();
+        if (trimmed && !isValidHttpsUrl(trimmed)) {
+           setLog("Invalid Webhook URL (must start with https://).");
+           showReaction("❌ INVALID URL");
+           return;
+        }
+        chatWebhookUrl = trimmed;
         localStorage.setItem('jima_chat_webhook', chatWebhookUrl);
         if (chatWebhookUrl) {
            setLog("Chat Webhook linked! He's online...");
@@ -1609,7 +1736,7 @@
     });
 
     function notifyChat(message) {
-      if (!chatWebhookUrl) return;
+      if (!chatWebhookUrl || !isValidHttpsUrl(chatWebhookUrl)) return;
       fetch(chatWebhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1618,15 +1745,23 @@
     }
 
     // Gemini API AI Forage
+    let geminiApiKey = localStorage.getItem('jima_gemini_api_key') || "";
     async function generateAIFood() {
       if (isGeneratingAI || pet.inMiniGame || pet.inHeistGame || pet.isSleeping || battle.active) return;
+      if (!geminiApiKey) {
+        const entered = prompt("Optional: Enter a Gemini API Key to enable live AI Dumpster Foraging (or leave blank for classic antics):", "");
+        if (entered && entered.trim()) {
+          geminiApiKey = entered.trim();
+          localStorage.setItem('jima_gemini_api_key', geminiApiKey);
+        }
+      }
       isGeneratingAI = true;
       setLog("Consulting the AI Dumpster...");
       sound.scuttle();
       elements.graphic.classList.add('shake-anim');
       
       try {
-        const apiKey = ""; // Leave blank or insert Gemini API key
+        const apiKey = geminiApiKey;
         if (!apiKey) throw new Error("No API Key configured");
         const payload = {
             contents: [{ parts: [{ text: "Generate a new trash item for Jimothy the raccoon." }] }],
@@ -1695,6 +1830,7 @@
        battle.enemyHp = battle.enemyMaxHp = battle.enemy.hp;
        battle.hp = battle.maxHp = 100;
        battle.isBlocking = false;
+       battle.turnLocked = false;
        battle.active = true;
 
        const miniGameScreen = document.getElementById('miniGameScreen');
@@ -1732,10 +1868,11 @@
     }
 
     function playerBattleAction(btn) {
+       if (!battle.active || battle.turnLocked) return;
        if (btn === 'A') { 
           sound.munch();
           haptic(30);
-          battle.enemyHp -= 25;
+          battle.enemyHp = Math.max(0, battle.enemyHp - 25);
           showReaction("BITE!");
        } else if (btn === 'B') { 
           sound.scuttle();
@@ -1747,7 +1884,7 @@
              pet.hunger -= 5;
              sound.thud();
              haptic([40, 50, 40]);
-             battle.enemyHp -= 40;
+             battle.enemyHp = Math.max(0, battle.enemyHp - 40);
              showReaction("YEET!");
              updateHUD();
           } else {
@@ -1773,11 +1910,14 @@
            return;
        }
 
-       setTimeout(enemyBattleTurn, 800);
+       battle.turnLocked = true;
+       if (battleTimeout) clearTimeout(battleTimeout);
+       battleTimeout = setTimeout(enemyBattleTurn, 800);
        renderBattleScreen();
     }
 
     function enemyBattleTurn() {
+       battleTimeout = null;
        if (!battle.active) return;
        sound.hiss();
        let dmg = battle.enemy.dmg;
@@ -1785,21 +1925,28 @@
        if (battle.isBlocking) dmg = Math.floor(dmg / 2);
        battle.isBlocking = false;
 
-       battle.hp -= dmg;
+       battle.hp = Math.max(0, battle.hp - dmg);
        showReaction(`${battle.enemy.name} attacked!`);
        haptic([40, 50, 40]);
-       document.getElementById('jimothyGraphic').classList.add('shake-anim');
-       setTimeout(() => document.getElementById('jimothyGraphic').classList.remove('shake-anim'), 300);
+       elements.graphic.classList.remove('idle-anim');
+       elements.graphic.classList.add('shake-anim');
+       setTimeout(() => {
+         elements.graphic.classList.remove('shake-anim');
+         if (!pet.isSleeping) elements.graphic.classList.add('idle-anim');
+       }, 300);
 
        if (battle.hp <= 0) {
            endBattle(false, `Lost to the ${battle.enemy.name}...`);
        } else {
+           battle.turnLocked = false;
            renderBattleScreen();
        }
     }
 
     function endBattle(won, msg) {
+       if (battleTimeout) { clearTimeout(battleTimeout); battleTimeout = null; }
        battle.active = false;
+       battle.turnLocked = false;
        const miniGameScreen = document.getElementById('miniGameScreen');
        miniGameScreen.classList.add('hidden');
        miniGameScreen.classList.remove('flex');
@@ -1904,17 +2051,19 @@
           
           if (pet.lastSaved) {
             const now = Date.now();
-            const diffMs = now - pet.lastSaved;
+            const diffMs = Math.max(0, now - pet.lastSaved);
             const diffMinutes = Math.floor(diffMs / 60000);
-            const diff10s = Math.floor(diffMs / 10000);
-            if (diff10s > 0) {
+            if (diffMinutes > 0) {
               pet.ageMinutes += diffMinutes;
-              if (pet.isSleeping) pet.energy = Math.min(100, pet.energy + (8 * diff10s));
-              else {
-                pet.hunger = Math.max(0, pet.hunger - (2.5 * diff10s));
-                pet.chaos = Math.min(100, pet.chaos + (2 * diff10s));
-                pet.grease = Math.max(0, pet.grease - (1 * diff10s));
-                pet.energy = Math.max(0, pet.energy - (1.5 * diff10s));
+              // Use a gentler per-minute offline progression rate (capped at 12 hours) so short breaks don't wipe stats
+              const cappedMinutes = Math.min(diffMinutes, 720);
+              if (pet.isSleeping) {
+                pet.energy = Math.min(100, pet.energy + (2 * cappedMinutes));
+              } else {
+                pet.hunger = Math.max(0, pet.hunger - (0.5 * cappedMinutes));
+                pet.chaos = Math.min(100, pet.chaos + (0.4 * cappedMinutes));
+                pet.grease = Math.max(0, pet.grease - (0.25 * cappedMinutes));
+                pet.energy = Math.max(0, pet.energy - (0.35 * cappedMinutes));
               }
             }
           }
@@ -2105,7 +2254,9 @@
       if (miniGameInterval) clearInterval(miniGameInterval);
       if (heistInterval) clearInterval(heistInterval);
       if (dreamInterval) clearInterval(dreamInterval);
+      if (battleTimeout) { clearTimeout(battleTimeout); battleTimeout = null; }
       battle.active = false;
+      battle.turnLocked = false;
 
       document.getElementById('miniGameScreen').classList.add('hidden');
       document.getElementById('miniGameScreen').classList.remove('flex');
@@ -2114,11 +2265,12 @@
       localStorage.removeItem(STATE_KEY);
       localStorage.removeItem('jima_ar_palace');
       if (arPalaceGroup) {
-        trashPieces.forEach(p => arPalaceGroup.remove(p));
-        uncollectedTrash.forEach(p => arPalaceGroup.remove(p));
+        trashPieces.forEach(p => { arPalaceGroup.remove(p); disposeObject3D(p); });
+        uncollectedTrash.forEach(p => { arPalaceGroup.remove(p); disposeObject3D(p); });
       }
       if (arAI.carriedTrash && arModel) {
         arModel.remove(arAI.carriedTrash);
+        disposeObject3D(arAI.carriedTrash);
       }
       arAI.carriedTrash = null;
       arAI.targetTrash = null;
@@ -2172,12 +2324,13 @@
       pet.energy = Math.min(100, Math.max(0, pet.energy));
       elements.hungerBar.style.width = `${Math.min(100, pet.hunger)}%`;
       elements.hunger.textContent = `${Math.round(pet.hunger)}%`;
+      const svgEl = document.getElementById('jimothySvg');
       if (pet.hunger > 100) {
          elements.hungerBar.style.backgroundColor = '#fbbf24'; 
-         document.getElementById('jimothyGraphic').style.transform = `scaleX(${1 + (pet.hunger - 100) / 100})`;
+         if (svgEl) svgEl.style.transform = `scaleX(${1 + (pet.hunger - 100) / 100})`;
       } else {
          elements.hungerBar.style.backgroundColor = 'var(--lcd-pixel)';
-         document.getElementById('jimothyGraphic').style.transform = `scaleX(1)`;
+         if (svgEl) svgEl.style.transform = 'scaleX(1)';
       }
       elements.chaosBar.style.width = `${pet.chaos}%`; elements.chaos.textContent = `${Math.round(pet.chaos)}%`;
       elements.greaseBar.style.width = `${pet.grease}%`; elements.grease.textContent = `${Math.round(pet.grease)}%`;
@@ -2219,7 +2372,7 @@
       elements.graphic.style.transform = 'scale(1.5) translateY(10px)';
       
       setTimeout(() => {
-        elements.graphic.style.transform = 'scale(1)';
+        elements.graphic.style.transform = '';
         sound.hiss();
         showReaction("🤬 *YEET*");
         setLog(`Jimothy threw ${proj.log} at the screen!`);
@@ -2348,6 +2501,7 @@
 
     let miniGameInterval = null, miniGameTimerVal = 15, dogWaking = 0, cansTipped = 0;
     function initMiniGame() {
+      if (pet.isSleeping) { showReaction("💤 Sleeping!"); sound.beep(); return; }
       if (pet.energy < 15) { showReaction("Too tired!"); sound.thud(); return; }
       pet.inMiniGame = true; miniGameTimerVal = 15; cansTipped = 0; dogWaking = 0;
       document.getElementById('miniGameScreen').classList.remove('hidden'); document.getElementById('miniGameScreen').classList.add('flex');
@@ -2373,7 +2527,7 @@
             <span class="text-[7px] font-bold px-1 py-0.5 rounded border" style="border-color: var(--lcd-pixel);">${dogWaking > 1 ? "⚠️ HIDE (B)" : "LOOT (A)"}</span>
           </div>
           <div class="w-full h-1.5 rounded overflow-hidden" style="background-color: var(--lcd-ui);">
-            <div class="h-full transition-all duration-300" style="background-color: var(--lcd-pixel); width: ${(dogWaking / 4) * 100}%;"></div>
+            <div class="h-full transition-all duration-300" style="background-color: var(--lcd-pixel); width: ${Math.min(100, (dogWaking / 4) * 100)}%;"></div>
           </div>
         </div>
       `;
@@ -2381,8 +2535,10 @@
 
     function miniGameHandleButton(btn) {
       if (btn === 'A') {
-        if (dogWaking >= 3) { sound.hiss(); haptic([40, 50, 40]); dogWaking += 2; renderGameScreen(); } 
-        else {
+        if (dogWaking >= 3) {
+          sound.hiss(); haptic([40, 50, 40]); dogWaking += 2; renderGameScreen();
+          if (dogWaking >= 4) { endMiniGame(false, "BARK! The neighbor's dog chased you away!"); return; }
+        } else {
           sound.munch(); haptic(30); cansTipped++; dogWaking = Math.min(3, dogWaking + 1);
           if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++;
           if (Math.random() > 0.70) {
@@ -2391,6 +2547,7 @@
              showReaction(`Found ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
           } else showReaction("Scavenging...");
           renderGameScreen();
+          if (dogWaking >= 4) { endMiniGame(false, "BARK! The neighbor's dog chased you away!"); return; }
         }
       } else if (btn === 'B') {
         if (pet.hunger > 100 && Math.random() < 0.3) { sound.thud(); haptic([40, 50, 40]); showReaction("Too fat to hide!"); } 
@@ -2418,6 +2575,7 @@
 
     let heistInterval = null, heistTimerVal = 20, suspicion = 0, heistLoot = 0;
     function initHeistGame() {
+      if (pet.isSleeping) { showReaction("💤 Sleeping!"); sound.beep(); return; }
       const hrs = new Date().getHours();
       if (hrs >= 6 && hrs < 18) { showReaction("☀️ Too bright!"); setLog("Jimothy refuses to burgle in broad daylight. Wait until night!"); sound.hiss(); return; }
       if (pet.energy < 20) { showReaction("Too tired!"); sound.thud(); return; }
@@ -2454,8 +2612,10 @@
 
     function heistHandleButton(btn) {
       if (btn === 'A') {
-        if (suspicion >= 85) { sound.hiss(); haptic([40, 50, 40]); suspicion += 20; renderHeistScreen(); } 
-        else {
+        if (suspicion >= 85) {
+          sound.hiss(); haptic([40, 50, 40]); suspicion += 20; renderHeistScreen();
+          if (suspicion >= 100) { endHeistGame(false, "🔦 BUSTED! The homeowner caught you!"); return; }
+        } else {
           sound.munch(); haptic(30); heistLoot++; suspicion += 15 + Math.floor(Math.random() * 10);
           if (Math.random() > 0.45) {
              const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
@@ -2463,6 +2623,7 @@
              showReaction(`Stole ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
           } else showReaction("Snatch!");
           renderHeistScreen();
+          if (suspicion >= 100) { endHeistGame(false, "🔦 BUSTED! The homeowner caught you!"); return; }
         }
       } else if (btn === 'B') { sound.scuttle(); haptic(20); suspicion = Math.max(0, suspicion - 30); showReaction("Frozen..."); renderHeistScreen(); }
     }
@@ -2653,6 +2814,9 @@
       if (e.key === 'ArrowRight') document.getElementById('dpadRight').click();
       if (e.key.toLowerCase() === 'a' || e.key === '1') btnA.click();
       if (e.key.toLowerCase() === 'b' || e.key === '2') btnB.click();
+      if (e.key.toLowerCase() === 'm' || e.key === 'Enter' || e.key === 'Escape') btnMenu.click();
+      if (e.key === 'Shift') btnSelect.click();
+      if (e.key === ' ') btnStart.click();
     });
 
     loadPrefs(); loadState(); drawTrashPalace(); updateHUD();
