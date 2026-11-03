@@ -19,6 +19,8 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦝</text></svg>">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS for Local Network / WebRTC P2P Alley Link -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <!-- Google Fonts: VT323 & Press Start 2P -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -262,6 +264,7 @@
 
       <!-- Settings Icon Row -->
       <div class="w-full flex justify-end space-x-2 mb-2 px-2">
+        <button id="alleyLinkBtn" class="text-xs transition hover:text-white relative" style="color: var(--brand-text);" title="Alley Link (Nearby Jimothys)">📡<span id="alleyLinkDot" class="hidden absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span></button>
         <button id="arToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Toggle AR Mode">🕶️</button>
         <button id="deviceToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Device Shape">📱</button>
         <button id="colorToggleBtn" class="text-xs transition hover:text-white" style="color: var(--brand-text);" title="Change Shell Color">🎨</button>
@@ -302,11 +305,11 @@
           </div>
 
           <div id="menuScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
-            <div class="flex justify-between items-center text-[9px] sm:text-[10px] font-bold border-b pb-1 mb-1" style="border-color: var(--lcd-ui);">
+            <div class="flex justify-between items-center text-[9px] sm:text-[10px] font-bold border-b pb-1 mb-1 shrink-0" style="border-color: var(--lcd-ui);">
               <span id="menuHeaderTitle">MAIN MENU</span>
               <span class="animate-pulse opacity-70">▼/▲</span>
             </div>
-            <div id="menuList" class="flex flex-col space-y-1 text-[8px] sm:text-[9px] font-mono mt-1"></div>
+            <div id="menuList" class="flex-1 flex flex-col space-y-0.5 overflow-y-auto text-[8px] sm:text-[9px] font-mono mt-0.5"></div>
           </div>
 
           <div id="inventoryScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
@@ -331,6 +334,24 @@
             <div id="marketGrid" class="grid grid-cols-4 gap-1.5 flex-1 content-start overflow-y-auto pr-0.5"></div>
             <div id="marketDesc" class="h-9 mt-1 text-[7px] sm:text-[8px] font-mono border-t pt-1 shrink-0 leading-tight" style="border-color: var(--lcd-ui);">
               SELECT AN ITEM
+            </div>
+          </div>
+
+          <!-- Alley Link (Nearby Multiplayer) Overlay -->
+          <div id="alleyLinkScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
+            <div class="flex justify-between items-center text-[9px] sm:text-[10px] font-bold border-b pb-1 mb-1 shrink-0" style="border-color: var(--lcd-ui);">
+              <span>📡 ALLEY LINK</span>
+              <span id="alleyRoomBadge" class="font-mono text-[8px]">CODE: ALLEY-1</span>
+            </div>
+            <div id="alleyPeerStatus" class="text-[7px] sm:text-[8px] font-mono px-1.5 py-1 rounded border mb-1 shrink-0 flex justify-between items-center" style="border-color: var(--lcd-ui); background-color: var(--lcd-ghost);">
+              <span id="alleyPeerText" class="truncate">SCANNING FOR JIMOTHYS...</span>
+              <span id="alleyPeerCount" class="font-bold ml-1 shrink-0">0 LINKED</span>
+            </div>
+            <div id="alleyActionList" class="flex-1 flex flex-col space-y-1 overflow-y-auto text-[8px] sm:text-[9px] font-mono">
+              <!-- Populated via JS -->
+            </div>
+            <div class="h-7 mt-1 text-[6px] sm:text-[7px] font-mono border-t pt-1 text-center leading-tight shrink-0 flex items-center justify-center" style="border-color: var(--lcd-ui);">
+              [A] SELECT   [▲/▼] MOVE   [B] EXIT
             </div>
           </div>
 
@@ -478,6 +499,29 @@
                    <ellipse cx="25" cy="25" rx="10" ry="2" style="fill: var(--lcd-pixel); animation: plateWobble 0.3s infinite;"/>
                    <line x1="62" y1="56" x2="75" y2="25" stroke="var(--lcd-pixel)" stroke-width="1.5"/>
                    <ellipse cx="75" cy="25" rx="10" ry="2" style="fill: var(--lcd-pixel); animation: plateWobble 0.4s infinite;"/>
+                </g>
+              </svg>
+            </div>
+
+            <!-- Visiting Neighbor Jimothy (Visible when linked via Alley Link) -->
+            <div id="visitorRaccoon" class="absolute bottom-4 right-2 z-10 w-[52px] h-[54px] hidden flex-col items-center cursor-pointer idle-anim" title="Linked Neighbor Jimothy!">
+              <div id="visitorTag" class="px-1 py-0.2 rounded text-[6px] font-bold mb-0.5 border whitespace-nowrap" style="background-color: var(--lcd-bg); color: var(--lcd-pixel); border-color: var(--lcd-pixel);">🦝 BUDDY</div>
+              <svg viewBox="0 0 100 90" class="w-full h-full pixelated" style="transform: scaleX(-1);" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M 68 62 C 82 62, 94 56, 92 42 C 90 34, 80 34, 76 40 C 74 46, 75 52, 68 56 Z" style="fill: var(--lcd-pixel);" />
+                <path d="M 77 45 C 80 43, 85 45, 85 49" style="stroke: var(--lcd-bg);" stroke-width="3" stroke-linecap="round" />
+                <ellipse cx="50" cy="56" rx="20" ry="16" style="fill: var(--lcd-pixel);" />
+                <ellipse cx="49" cy="58" rx="12" ry="9" style="fill: var(--lcd-ghost);" />
+                <polygon points="34,26 42,12 48,27" style="fill: var(--lcd-pixel);" />
+                <polygon points="66,26 58,12 52,27" style="fill: var(--lcd-pixel);" />
+                <ellipse cx="50" cy="35" rx="19" ry="14" style="fill: var(--lcd-pixel);" />
+                <ellipse cx="50" cy="36" rx="16" ry="7" style="fill: var(--lcd-ghost);" />
+                <ellipse cx="41" cy="35" rx="5.5" ry="4.5" style="fill: var(--lcd-pixel);" />
+                <ellipse cx="59" cy="35" rx="5.5" ry="4.5" style="fill: var(--lcd-pixel);" />
+                <circle cx="41" cy="34" r="2" style="fill: var(--lcd-bg);" />
+                <circle cx="59" cy="34" r="2" style="fill: var(--lcd-bg);" />
+                <ellipse cx="50" cy="41" rx="4.5" ry="3" style="fill: var(--lcd-bg);" />
+                <g id="visitorCrown" style="display: none;">
+                  <polygon points="42,16 46,21 50,14 54,21 58,16 57,25 43,25" style="fill: var(--lcd-pixel);" />
                 </g>
               </svg>
             </div>
@@ -1838,6 +1882,7 @@
        if (isMenuOpen) toggleMenu();
        if (isInventoryOpen) toggleInventory();
        if (isMarketOpen) toggleMarket();
+       if (isAlleyLinkOpen) toggleAlleyLink();
 
        const enemies = [
          { name: "FERAL CAT", emoji: "🐈", hp: 100, dmg: 15 },
@@ -2165,7 +2210,7 @@
     }
 
     let isMenuOpen = false, menuIndex = 0;
-    const MENU_OPTIONS = ["🏪 TRASH MARKET", "🎒 INVENTORY", "✨ AI FORAGE", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
+    const MENU_OPTIONS = ["🏪 TRASH MARKET", "🎒 INVENTORY", "📡 ALLEY LINK", "✨ AI FORAGE", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
     
     // Confirmation System
     let isConfirmReset = false;
@@ -2173,6 +2218,14 @@
 
     let isInventoryOpen = false, invIndex = 0, invItems = [];
     let isMarketOpen = false, marketTab = 'BUY', marketIndex = 0, marketList = [];
+    let isAlleyLinkOpen = false, alleyActionIndex = 0;
+    const ALLEY_ACTIONS = [
+      { id: 'wave', label: "👋 WAVE / HISS", desc: "Send a friendly hiss (+5% ENERGY)" },
+      { id: 'gift', label: "🎁 SEND TRASH GIFT (1✨)", desc: "Send 1 Cap + snack to nearby Jimothy" },
+      { id: 'tussle', label: "🥊 TRASH TUSSLE (CO-OP)", desc: "Co-op dumpster brawl! Both get +2✨ & +25 Trash" },
+      { id: 'code', label: "🔑 CHANGE ALLEY CODE", desc: "Set shared Wi-Fi / Room Code" },
+      { id: 'close', label: "❌ CLOSE", desc: "Return to alley" }
+    ];
     const MARKET_PREMIUM_CATALOG = ['truffle_fries', 'wagyu_scraps', 'artisan_cheese', 'caviar_tin', 'golden_bagel', 'radioactive_sludge', 'royal_chalice', 'crypto_usb'];
 
     const ITEM_DB = {
@@ -2242,6 +2295,9 @@
             btnA.click();
           });
           list.appendChild(item);
+          if (idx === menuIndex) {
+            setTimeout(() => item.scrollIntoView({ block: 'nearest' }), 0);
+          }
         });
       }
     }
@@ -2250,6 +2306,7 @@
       if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
       if (isInventoryOpen) toggleInventory();
       if (isMarketOpen) toggleMarket();
+      if (isAlleyLinkOpen) toggleAlleyLink();
       isMenuOpen = !isMenuOpen;
       isConfirmReset = false;
       const menuDiv = document.getElementById('menuScreen');
@@ -2260,6 +2317,7 @@
     function toggleInventory() {
       if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
       if (isMarketOpen) toggleMarket();
+      if (isAlleyLinkOpen) toggleAlleyLink();
       isInventoryOpen = !isInventoryOpen;
       const invDiv = document.getElementById('inventoryScreen');
       if (isInventoryOpen) { invDiv.classList.remove('hidden'); invDiv.classList.add('flex'); renderInventory(); sound.beep(); } 
@@ -2303,6 +2361,7 @@
     function toggleMarket() {
       if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
       if (isInventoryOpen) toggleInventory();
+      if (isAlleyLinkOpen) toggleAlleyLink();
       isMarketOpen = !isMarketOpen;
       const marketDiv = document.getElementById('marketScreen');
       if (isMarketOpen) {
@@ -2512,6 +2571,7 @@
 
       toggleMenu();
       if (opt.includes("MARKET")) toggleMarket();
+      else if (opt.includes("ALLEY LINK")) toggleAlleyLink();
       else if (opt.includes("NAP")) toggleNap();
       else if (opt.includes("LINT")) btnStart.click(); 
       else if (opt.includes("INVENTORY")) toggleInventory();
@@ -2564,7 +2624,7 @@
     }
 
     function throwTrashAtScreen() {
-      if (isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || isMarketOpen || pet.isSleeping || isAnimatingThrow) return;
+      if (isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || isMarketOpen || isAlleyLinkOpen || pet.isSleeping || isAnimatingThrow) return;
       isAnimatingThrow = true;
       const projectiles = [ { emoji: "🍅", type: "splat", log: "a rotten tomato" }, { emoji: "🪨", type: "crack", log: "a heavy rock" }, { emoji: "🥦", type: "glitch", log: "cursed broccoli" }, { emoji: "🥫", type: "crack", log: "a soup can" } ];
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
@@ -2637,7 +2697,7 @@
 
     setInterval(() => {
       pet.ageMinutes += 1;
-      const isBusy = isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || isMarketOpen;
+      const isBusy = isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || isMarketOpen || isAlleyLinkOpen;
 
       if (pet.isSleeping) {
         pet.energy = Math.min(100, pet.energy + 8); gainXp(1); 
@@ -2870,6 +2930,7 @@
       clearIdleAnims();
       if (isMarketOpen) toggleMarket();
       else if (isInventoryOpen) toggleInventory();
+      else if (isAlleyLinkOpen) toggleAlleyLink();
       else toggleMenu();
     });
 
@@ -2877,6 +2938,7 @@
       haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('A'); return; }
+      if (isAlleyLinkOpen) { executeAlleyAction(); return; }
       if (isMarketOpen) { executeMarketTransaction(); return; }
       if (isInventoryOpen) {
         if (invItems.length > 0) {
@@ -2919,6 +2981,7 @@
       haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('B'); return; }
+      if (isAlleyLinkOpen) { toggleAlleyLink(); return; }
       if (isMarketOpen) { toggleMarket(); return; }
       if (isInventoryOpen) { toggleInventory(); return; }
       if (isMenuOpen) {
@@ -2940,7 +3003,7 @@
       clearIdleAnims(); sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
       if (isMarketOpen) { switchMarketTab(); return; }
-      if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen) return;
+      if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen || isAlleyLinkOpen) return;
       toggleNap(); 
     });
     
@@ -2949,7 +3012,7 @@
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
       if (isMarketOpen) { switchMarketTab(); return; }
-      if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen) return;
+      if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen || isAlleyLinkOpen) return;
       sound.scuttle(); if (pet.isSleeping) return;
       pet.grease = Math.min(100, pet.grease + 25); gainXp(15);
       showReaction("✨ Fresh Grime!"); setLog("Coated Jimothy in warm, linty goodness."); updateHUD();
@@ -2957,7 +3020,7 @@
 
     const pokeAction = () => {
        haptic(25); clearIdleAnims();
-       if (pet.isSleeping || isMenuOpen || isInventoryOpen || isMarketOpen || pet.inMiniGame || pet.inHeistGame || battle.active) return;
+       if (pet.isSleeping || isMenuOpen || isInventoryOpen || isMarketOpen || isAlleyLinkOpen || pet.inMiniGame || pet.inHeistGame || battle.active) return;
        const pokeEvents = [
          { sfx: 'yip', msg: "🐾 *YIP!*", log: "You poked Jimothy.", chaos: 2 }, { sfx: 'grumble', msg: "💢 *GRUMBLE*", log: "Jimothy growled at your finger.", chaos: 5 },
          { sfx: 'trill', msg: "✨ *TRILL*", log: "Jimothy purred happily.", chaos: -2 }, { sfx: 'hiss', msg: "🤬 *HISS*", log: "Jimothy hated that.", chaos: 8 }, { sfx: 'scuttle', msg: "🏃 *SCUTTLE*", log: "Jimothy dodged your finger.", chaos: 0 }
@@ -2973,7 +3036,8 @@
     
     document.getElementById('dpadUp').addEventListener('click', () => {
       haptic(15);
-      if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.max(0, marketIndex - 4); renderMarket(); }
+      if (isAlleyLinkOpen) { sound.beep(); alleyActionIndex = Math.max(0, alleyActionIndex - 1); renderAlleyLink(); }
+      else if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.max(0, marketIndex - 4); renderMarket(); }
       else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 4); renderInventory(); }
       else if (isMenuOpen) { 
         sound.beep(); 
@@ -2986,7 +3050,8 @@
     
     document.getElementById('dpadDown').addEventListener('click', () => {
       haptic(15);
-      if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.min(marketList.length - 1, marketIndex + 4); renderMarket(); }
+      if (isAlleyLinkOpen) { sound.beep(); alleyActionIndex = Math.min(ALLEY_ACTIONS.length - 1, alleyActionIndex + 1); renderAlleyLink(); }
+      else if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.min(marketList.length - 1, marketIndex + 4); renderMarket(); }
       else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 4); renderInventory(); }
       else if (isMenuOpen) { 
         sound.beep(); 
@@ -3009,6 +3074,434 @@
       if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.min(marketList.length - 1, marketIndex + 1); renderMarket(); }
       else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 1); renderInventory(); }
       else pokeAction();
+    });
+
+    // Alley Link (Nearby Jimothy Local Network & Same-Device Multiplayer)
+    class AlleyLinkManager {
+      constructor() {
+        this.clientId = 'jim-' + Math.random().toString(36).slice(2, 8);
+        this.roomCode = 'ALLEY-1';
+        try {
+          this.roomCode = (localStorage.getItem('jimothy_alley_code') || 'ALLEY-1').toUpperCase();
+        } catch(e) {}
+        this.peers = {}; // clientId -> { stage, level, ageMinutes, chaos, caps, lastSeen }
+        this.bc = null;
+        this.peer = null;
+        this.conns = {}; // peerId -> DataConnection
+        this.slotIndex = 0;
+        this.maxSlots = 4;
+
+        this.initBroadcastChannel();
+        this.initPeerJS();
+
+        setInterval(() => this.broadcastPresence(), 3000);
+        setInterval(() => this.prunePeers(), 4000);
+      }
+
+      getStageShort(stage) {
+        if (stage === 'deity') return '🌌 DEITY';
+        if (stage === 'emperor') return '👑 EMPEROR';
+        if (stage === 'goblin') return '🦝 GOBLIN';
+        if (stage === 'burglar') return '🦝 BURGLAR';
+        return '🦝 KIT';
+      }
+
+      initBroadcastChannel() {
+        if ('BroadcastChannel' in window) {
+          try {
+            if (this.bc) this.bc.close();
+            this.bc = new BroadcastChannel('jimothy_alley_' + this.roomCode);
+            this.bc.onmessage = (ev) => {
+              if (ev && ev.data) this.handleMessage(ev.data);
+            };
+          } catch(e) {}
+        }
+      }
+
+      getRoomSlotId(slot) {
+        const cleanCode = this.roomCode.replace(/[^A-Z0-9]/gi, '').toLowerCase() || 'alley1';
+        return `jimothy35-${cleanCode}-slot-${slot}`;
+      }
+
+      initPeerJS(trySlot = 0) {
+        if (typeof Peer === 'undefined') return;
+        try {
+          if (this.peer) {
+            this.peer.destroy();
+            this.peer = null;
+          }
+          this.conns = {};
+          this.slotIndex = trySlot;
+          const myPeerId = this.getRoomSlotId(trySlot);
+          const p = new Peer(myPeerId);
+
+          p.on('open', () => {
+            this.peer = p;
+            this.connectToOtherSlots();
+            this.broadcastPresence();
+          });
+
+          p.on('connection', (conn) => {
+            this.setupConn(conn);
+          });
+
+          p.on('error', (err) => {
+            if (err && err.type === 'unavailable-id' && trySlot + 1 < this.maxSlots) {
+              this.initPeerJS(trySlot + 1);
+            }
+          });
+        } catch(e) {}
+      }
+
+      connectToOtherSlots() {
+        if (!this.peer || !this.peer.open) return;
+        for (let s = 0; s < this.maxSlots; s++) {
+          if (s === this.slotIndex) continue;
+          const targetId = this.getRoomSlotId(s);
+          if (!this.conns[targetId]) {
+            try {
+              const conn = this.peer.connect(targetId, { reliable: true });
+              this.setupConn(conn);
+            } catch(e) {}
+          }
+        }
+      }
+
+      setupConn(conn) {
+        if (!conn) return;
+        conn.on('open', () => {
+          this.conns[conn.peer] = conn;
+          conn.send(this.makePacket('presence'));
+        });
+        conn.on('data', (data) => {
+          this.handleMessage(data);
+        });
+        conn.on('close', () => {
+          delete this.conns[conn.peer];
+        });
+        conn.on('error', () => {
+          delete this.conns[conn.peer];
+        });
+      }
+
+      makePacket(type, extra = {}) {
+        return {
+          type,
+          senderId: this.clientId,
+          roomCode: this.roomCode,
+          stage: pet.stage,
+          level: pet.level || 1,
+          ageMinutes: pet.ageMinutes,
+          chaos: Math.round(pet.chaos),
+          caps: pet.shinyCaps,
+          ...extra
+        };
+      }
+
+      sendPacket(type, extra = {}) {
+        const pkt = this.makePacket(type, extra);
+        if (this.bc) {
+          try { this.bc.postMessage(pkt); } catch(e) {}
+        }
+        Object.values(this.conns).forEach(conn => {
+          if (conn && conn.open) {
+            try { conn.send(pkt); } catch(e) {}
+          }
+        });
+      }
+
+      broadcastPresence() {
+        this.sendPacket('presence');
+        if (this.peer && this.peer.open && Object.keys(this.conns).length === 0) {
+          this.connectToOtherSlots();
+        }
+      }
+
+      prunePeers() {
+        const now = Date.now();
+        let changed = false;
+        Object.keys(this.peers).forEach(id => {
+          if (now - this.peers[id].lastSeen > 11000) {
+            delete this.peers[id];
+            changed = true;
+          }
+        });
+        if (changed) this.updateVisitorUI();
+      }
+
+      getActivePeers() {
+        return Object.values(this.peers);
+      }
+
+      handleMessage(msg) {
+        if (!msg || msg.senderId === this.clientId || msg.roomCode !== this.roomCode) return;
+
+        const isNewPeer = !this.peers[msg.senderId];
+        this.peers[msg.senderId] = {
+          id: msg.senderId,
+          stage: msg.stage || 'kit',
+          level: msg.level || 1,
+          ageMinutes: msg.ageMinutes || 1,
+          chaos: msg.chaos || 50,
+          caps: msg.caps || 0,
+          lastSeen: Date.now()
+        };
+
+        if (isNewPeer) {
+          sound.beep();
+          haptic([25, 40, 25]);
+          showReaction("📡 BUDDY LINKED!", 1800);
+          setLog(`Nearby Jimothy (${this.getStageShort(msg.stage)}) entered the alley!`);
+          this.sendPacket('presence');
+        }
+
+        this.updateVisitorUI();
+
+        if (msg.type === 'wave') {
+          sound.scuttle();
+          haptic(25);
+          pet.energy = Math.min(100, pet.energy + 5);
+          gainXp(10);
+          this.animateVisitor('shake-anim', 700);
+          showReaction(`👋 ${this.getStageShort(msg.stage)} HISSED!`, 2000);
+          setLog(`Nearby Jimothy waved & hissed! (+5% ENERGY)`);
+          updateHUD();
+        } else if (msg.type === 'gift') {
+          sound.fanfare();
+          haptic([40, 30, 60]);
+          const itemKey = msg.itemKey && ITEM_DB[msg.itemKey] ? msg.itemKey : 'stale_pizza';
+          pet.inventory = pet.inventory || {};
+          pet.inventory[itemKey] = (pet.inventory[itemKey] || 0) + 1;
+          pet.shinyCaps += 1;
+          gainXp(25);
+          this.animateVisitor('scurry-anim', 1000);
+          showReaction(`🎁 GOT ${ITEM_DB[itemKey].icon}+1✨!`, 2200);
+          setLog(`Nearby Jimothy sent you ${ITEM_DB[itemKey].name} & 1 CAP!`);
+          if (isInventoryOpen) renderInventory();
+          if (isMarketOpen) renderMarket();
+          updateHUD();
+        } else if (msg.type === 'tussle') {
+          this.triggerTussleEffects(false);
+        }
+      }
+
+      animateVisitor(cls, duration = 900) {
+        const v = document.getElementById('visitorRaccoon');
+        if (!v) return;
+        v.classList.remove('idle-anim', 'shake-anim', 'scurry-anim');
+        v.classList.add(cls);
+        setTimeout(() => {
+          v.classList.remove(cls);
+          v.classList.add('idle-anim');
+        }, duration);
+      }
+
+      triggerTussleEffects(isInitiator) {
+        sound.scuttle();
+        haptic([40, 40, 80]);
+        setTimeout(() => sound.fanfare(), 350);
+        pet.chaos = Math.min(100, pet.chaos + 12);
+        pet.grease = Math.min(100, pet.grease + 12);
+        pet.shinyCaps += 2;
+        pet.trashCollected = (pet.trashCollected || 0) + 25;
+        gainXp(35);
+
+        if (!pet.isSleeping && !isAnimatingThrow) {
+          elements.graphic.classList.remove('idle-anim');
+          elements.graphic.classList.add('scurry-anim');
+          setTimeout(() => {
+            elements.graphic.classList.remove('scurry-anim');
+            if (!pet.isSleeping && !isAnimatingThrow && !pet.inMiniGame && !pet.inHeistGame && !battle.active) {
+              elements.graphic.classList.add('idle-anim');
+            }
+          }, 1200);
+        }
+        this.animateVisitor('scurry-anim', 1200);
+        drawTrashPalace();
+        showReaction("🥊 TUSSLE! +2✨", 2200);
+        setLog(isInitiator
+          ? "Tussled with nearby Jimothy! Both got +2 CAPS & +25 Trash!"
+          : "Nearby Jimothy started a Trash Tussle! +2 CAPS & +25 Trash!");
+        updateHUD();
+        if (isAlleyLinkOpen) renderAlleyLink();
+      }
+
+      updateVisitorUI() {
+        const list = this.getActivePeers();
+        const visitorEl = document.getElementById('visitorRaccoon');
+        const visitorTag = document.getElementById('visitorTag');
+        const visitorCrown = document.getElementById('visitorCrown');
+        const dotEl = document.getElementById('alleyLinkDot');
+
+        if (list.length > 0) {
+          const buddy = list[0];
+          if (visitorEl) {
+            visitorEl.classList.remove('hidden');
+            visitorEl.classList.add('flex');
+          }
+          if (visitorTag) visitorTag.textContent = this.getStageShort(buddy.stage);
+          if (visitorCrown) visitorCrown.style.display = (buddy.stage === 'emperor' || buddy.stage === 'deity') ? 'block' : 'none';
+          if (dotEl) dotEl.classList.remove('hidden');
+        } else {
+          if (visitorEl) {
+            visitorEl.classList.add('hidden');
+            visitorEl.classList.remove('flex');
+          }
+          if (dotEl) dotEl.classList.add('hidden');
+        }
+
+        if (isAlleyLinkOpen) renderAlleyLink();
+      }
+
+      changeRoomCode() {
+        const input = window.prompt("Enter shared Alley Link Code (devices on same code auto-connect):", this.roomCode);
+        if (!input) return;
+        this.roomCode = input.trim().toUpperCase().slice(0, 12) || 'ALLEY-1';
+        try {
+          localStorage.setItem('jimothy_alley_code', this.roomCode);
+        } catch(e) {}
+        this.peers = {};
+        this.initBroadcastChannel();
+        this.initPeerJS(0);
+        this.updateVisitorUI();
+        showReaction(`📡 ${this.roomCode}`, 1500);
+        setLog(`Switched Alley Link frequency to ${this.roomCode}.`);
+      }
+    }
+
+    const alleyLink = new AlleyLinkManager();
+
+    function renderAlleyLink() {
+      const badge = document.getElementById('alleyRoomBadge');
+      if (badge) badge.textContent = `CODE: ${alleyLink.roomCode}`;
+
+      const peers = alleyLink.getActivePeers();
+      const peerText = document.getElementById('alleyPeerText');
+      const peerCount = document.getElementById('alleyPeerCount');
+      if (peerCount) peerCount.textContent = `${peers.length} LINKED`;
+      if (peerText) {
+        if (peers.length > 0) {
+          const b = peers[0];
+          peerText.textContent = `NEARBY: ${alleyLink.getStageShort(b.stage)} (L:${b.level || 1} ✨${b.caps})`;
+        } else {
+          peerText.textContent = `SCANNING [${alleyLink.roomCode}]... OPEN ON 2ND DEVICE/TAB`;
+        }
+      }
+
+      const listEl = document.getElementById('alleyActionList');
+      if (!listEl) return;
+      listEl.innerHTML = '';
+
+      ALLEY_ACTIONS.forEach((act, idx) => {
+        const row = document.createElement('div');
+        const isSelected = idx === alleyActionIndex;
+        row.className = `p-1 rounded flex justify-between items-center cursor-pointer transition-colors duration-100`;
+        if (isSelected) {
+          row.style.backgroundColor = 'var(--lcd-pixel)';
+          row.style.color = 'var(--lcd-bg)';
+        } else {
+          row.style.color = 'var(--lcd-pixel)';
+        }
+        row.textContent = (isSelected ? '▶ ' : '  ') + act.label;
+        row.addEventListener('click', () => {
+          haptic(15);
+          alleyActionIndex = idx;
+          renderAlleyLink();
+          executeAlleyAction();
+        });
+        listEl.appendChild(row);
+      });
+    }
+
+    function toggleAlleyLink() {
+      if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
+      if (isMenuOpen) toggleMenu();
+      if (isInventoryOpen) toggleInventory();
+      if (isMarketOpen) toggleMarket();
+      isAlleyLinkOpen = !isAlleyLinkOpen;
+      const screen = document.getElementById('alleyLinkScreen');
+      if (isAlleyLinkOpen) {
+        alleyActionIndex = 0;
+        screen.classList.remove('hidden');
+        screen.classList.add('flex');
+        alleyLink.broadcastPresence();
+        renderAlleyLink();
+        sound.beep();
+      } else {
+        screen.classList.add('hidden');
+        screen.classList.remove('flex');
+        sound.beep();
+      }
+    }
+
+    function executeAlleyAction() {
+      const act = ALLEY_ACTIONS[alleyActionIndex];
+      if (!act) return;
+
+      if (act.id === 'close') {
+        toggleAlleyLink();
+        return;
+      }
+      if (act.id === 'code') {
+        alleyLink.changeRoomCode();
+        renderAlleyLink();
+        return;
+      }
+
+      const peers = alleyLink.getActivePeers();
+      if (peers.length === 0) {
+        sound.thud();
+        haptic([40, 50, 40]);
+        showReaction("NO BUDDY NEARBY!");
+        setLog(`No other Jimothy on code ${alleyLink.roomCode} yet. Open another tab or device!`);
+        return;
+      }
+
+      if (act.id === 'wave') {
+        alleyLink.sendPacket('wave');
+        sound.scuttle();
+        haptic(25);
+        pet.energy = Math.min(100, pet.energy + 5);
+        gainXp(10);
+        alleyLink.animateVisitor('shake-anim', 700);
+        showReaction("👋 SENT HISS!");
+        setLog("Waved & hissed at your alley neighbor! (+5% ENERGY)");
+        updateHUD();
+        toggleAlleyLink();
+      } else if (act.id === 'gift') {
+        if (pet.shinyCaps < 1) {
+          sound.thud();
+          haptic([40, 50, 40]);
+          showReaction("NEED 1 CAP!");
+          setLog("You need at least 1 Shiny Cap to send a Trash Gift.");
+          return;
+        }
+        pet.shinyCaps -= 1;
+        const randomItem = LOOTABLE_ITEMS[Math.floor(Math.random() * LOOTABLE_ITEMS.length)];
+        alleyLink.sendPacket('gift', { itemKey: randomItem });
+        sound.fanfare();
+        haptic([30, 40, 60]);
+        gainXp(25);
+        showReaction(`🎁 SENT ${ITEM_DB[randomItem].icon}!`);
+        setLog(`Sent ${ITEM_DB[randomItem].name} & 1 CAP to nearby Jimothy!`);
+        updateHUD();
+        toggleAlleyLink();
+      } else if (act.id === 'tussle') {
+        alleyLink.sendPacket('tussle');
+        toggleAlleyLink();
+        alleyLink.triggerTussleEffects(true);
+      }
+    }
+
+    document.getElementById('alleyLinkBtn').addEventListener('click', () => {
+      haptic(15);
+      toggleAlleyLink();
+    });
+
+    document.getElementById('visitorRaccoon').addEventListener('click', () => {
+      if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
+      haptic(15);
+      toggleAlleyLink();
     });
 
     document.getElementById('deviceToggleBtn').addEventListener('click', () => { haptic(15); sound.beep(); prefs.shapeIdx = (prefs.shapeIdx + 1) % SHAPES.length; applyPrefs(); showReaction("📱 Shape Changed", 1000); });
