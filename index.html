@@ -320,6 +320,20 @@
             </div>
           </div>
 
+          <div id="marketScreen" class="absolute inset-0 z-40 hidden flex-col p-2" style="background-color: var(--lcd-bg);">
+            <div class="flex justify-between items-center text-[8px] sm:text-[9px] font-bold border-b pb-1 mb-1 shrink-0" style="border-color: var(--lcd-ui);">
+              <div class="flex items-center space-x-1">
+                <button id="marketTabBuy" class="px-1.5 py-0.5 rounded text-[7px] sm:text-[8px]">🛒 BUY</button>
+                <button id="marketTabSell" class="px-1.5 py-0.5 rounded text-[7px] sm:text-[8px]">💰 SELL</button>
+              </div>
+              <span id="marketCapsHeader" class="font-mono">✨ 3 CAPS</span>
+            </div>
+            <div id="marketGrid" class="grid grid-cols-4 gap-1.5 flex-1 content-start overflow-y-auto pr-0.5"></div>
+            <div id="marketDesc" class="h-9 mt-1 text-[7px] sm:text-[8px] font-mono border-t pt-1 shrink-0 leading-tight" style="border-color: var(--lcd-ui);">
+              SELECT AN ITEM
+            </div>
+          </div>
+
           <div class="flex justify-between items-center text-[8px] sm:text-[9px] border-b pb-1 font-mono" style="border-color: var(--lcd-ui);">
             <span id="rankBadge" class="font-bold truncate max-w-[170px]">KIT BANDIT (AGE 1)</span>
             <div class="flex items-center space-x-1.5">
@@ -1572,6 +1586,11 @@
         this.init();
         [120, 105, 115, 100].forEach((f, i) => setTimeout(() => this.playTone(f, 'sawtooth', 0.1, 0.08), i * 90));
       }
+      cashRegister() {
+        if (this.muted) return;
+        this.init();
+        [987.77, 1318.51].forEach((f, i) => setTimeout(() => this.playTone(f, 'square', 0.09, 0.08), i * 75));
+      }
       yip() {
         if (this.muted) return;
         this.init();
@@ -1818,6 +1837,7 @@
     function triggerRandomEncounter() {
        if (isMenuOpen) toggleMenu();
        if (isInventoryOpen) toggleInventory();
+       if (isMarketOpen) toggleMarket();
 
        const enemies = [
          { name: "FERAL CAT", emoji: "🐈", hp: 100, dmg: 15 },
@@ -1959,8 +1979,7 @@
           pet.chaos += 15;
           setLog(msg);
           if (Math.random() > 0.35) {
-             const items = Object.keys(ITEM_DB);
-             const dropped = items[Math.floor(Math.random() * items.length)];
+             const dropped = LOOTABLE_ITEMS[Math.floor(Math.random() * LOOTABLE_ITEMS.length)];
              pet.inventory = pet.inventory || {};
              pet.inventory[dropped] = (pet.inventory[dropped] || 0) + 1;
              showReaction(`Found ${ITEM_DB[dropped].icon}!`);
@@ -2146,35 +2165,49 @@
     }
 
     let isMenuOpen = false, menuIndex = 0;
-    const MENU_OPTIONS = ["✨ AI FORAGE", "🎒 INVENTORY", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
+    const MENU_OPTIONS = ["🏪 TRASH MARKET", "🎒 INVENTORY", "✨ AI FORAGE", "💤 NAP TIME", "🧹 LINT ROLL", "🏠 NIGHT HEIST", "🔄 RESET JIMOTHY", "❌ CANCEL"];
     
     // Confirmation System
     let isConfirmReset = false;
     let resetMenuIndex = 1; // Default to NO
 
     let isInventoryOpen = false, invIndex = 0, invItems = [];
+    let isMarketOpen = false, marketTab = 'BUY', marketIndex = 0, marketList = [];
+    const MARKET_PREMIUM_CATALOG = ['truffle_fries', 'wagyu_scraps', 'artisan_cheese', 'caviar_tin', 'golden_bagel', 'radioactive_sludge', 'royal_chalice', 'crypto_usb'];
+
     const ITEM_DB = {
-      'battery': { icon: '🔋', name: 'AA Battery', desc: 'Spicy tube. ENERGY+25 CHAOS+10', use: () => { pet.energy+=25; pet.chaos+=10; sound.scuttle(); } },
-      'sludge': { icon: '🧪', name: 'Glow Sludge', desc: 'Delicious. GREASE+30 TRASH+10', use: () => { pet.grease+=30; pet.hunger+=10; sound.munch(); } },
-      'rat_toy': { icon: '🐁', name: 'Rubber Rat', desc: 'Squeak! Calms him down. CHAOS-25', use: () => { pet.chaos-=25; sound.beep(); } },
-      'stale_pizza': { icon: '🍕', name: 'Floor Pizza', desc: 'Aged perfectly. TRASH+40', use: () => { pet.hunger+=40; sound.munch(); } },
-      'energy_drink': { icon: '🥫', name: 'Jolt Cola', desc: 'Liquid zoom! ENERGY+50 CHAOS+30', use: () => { pet.energy+=50; pet.chaos+=30; sound.fanfare(); } },
-      'leftover_sushi': { icon: '🍣', name: 'Warm Gas Sushi', desc: 'Questionable. TRASH+45 CHAOS+20', use: () => { pet.hunger+=45; pet.chaos+=20; sound.munch(); } },
-      'shiny_spoon': { icon: '🥄', name: 'Bent Spoon', desc: 'Ooooh shiny! CAPS+2 CHAOS-15', use: () => { pet.shinyCaps+=2; pet.chaos-=15; sound.fanfare(); } },
-      'bacon_jar': { icon: '🫙', name: 'Bacon Drip Jar', desc: 'Pure lard. GREASE+50 TRASH+25', use: () => { pet.grease+=50; pet.hunger+=25; sound.trill(); } },
-      'bubble_wrap': { icon: '🫧', name: 'Bubble Wrap', desc: 'Pop pop pop! CHAOS-40 ENERGY-5', use: () => { pet.chaos-=40; pet.energy-=5; sound.beep(); } },
-      'espresso_pod': { icon: '☕', name: 'Used Espresso', desc: 'Crunchy grounds! ENERGY+45 CHAOS+20', use: () => { pet.energy+=45; pet.chaos+=20; sound.scuttle(); } },
-      'copper_wire': { icon: '🔌', name: 'Copper Wire', desc: 'Stripped from a wall. CAPS+3 CHAOS+10', use: () => { pet.shinyCaps+=3; pet.chaos+=10; sound.fanfare(); } },
-      'moldy_bagel': { icon: '🥯', name: 'Fuzzy Bagel', desc: 'Penicillin boost! TRASH+30 GREASE+15', use: () => { pet.hunger+=30; pet.grease+=15; sound.munch(); } },
-      'catnip_mouse': { icon: '🧶', name: 'Catnip Yarn', desc: 'Stolen from a cat. CHAOS+35 ENERGY+15', use: () => { pet.chaos+=35; pet.energy+=15; sound.yip(); } },
-      'hairball': { icon: '🧶', name: 'Cursed Hairball', desc: 'Why did he eat it?! GREASE+40 TRASH+5', use: () => { pet.grease+=40; pet.hunger+=5; sound.hiss(); } },
-      'gold_tooth': { icon: '🦷', name: 'Gold Crown', desc: 'Found in an alley. CAPS+5!', use: () => { pet.shinyCaps+=5; sound.fanfare(); } },
-      'hot_sauce': { icon: '🌶️', name: 'Taco Sauce Pkt', desc: 'FIRE MOUTH! CHAOS+40 ENERGY+20', use: () => { pet.chaos+=40; pet.energy+=20; sound.hiss(); } },
-      'cardboard_tube': { icon: '🧻', name: 'TP Roll Tube', desc: 'Bap bap! PALACE+25 CHAOS-15', use: () => { pet.trashCollected=(pet.trashCollected||0)+25; pet.chaos-=15; drawTrashPalace(); sound.thud(); } },
-      'rac_crown': { icon: '🥫', name: 'Golden Pull-Tab', desc: 'Royal currency! CAPS+4 XP+50', use: () => { pet.shinyCaps+=4; gainXp(50); sound.fanfare(); } },
-      'mystery_meat': { icon: '🍖', name: 'Alley Rib-Bite', desc: 'Unknown origin. TRASH+55 GREASE+20', use: () => { pet.hunger+=55; pet.grease+=20; sound.trill(); } },
-      'soap_bar': { icon: '🧼', name: 'Hotel Soap', desc: 'CURSED CLEANLINESS! GREASE-35 CHAOS+25', use: () => { pet.grease-=35; pet.chaos+=25; sound.hiss(); } }
+      'battery': { icon: '🔋', name: 'AA Battery', sellPrice: 1, desc: 'Spicy tube. ENERGY+25 CHAOS+10', use: () => { pet.energy+=25; pet.chaos+=10; sound.scuttle(); } },
+      'sludge': { icon: '🧪', name: 'Glow Sludge', sellPrice: 2, desc: 'Delicious. GREASE+30 TRASH+10', use: () => { pet.grease+=30; pet.hunger+=10; sound.munch(); } },
+      'rat_toy': { icon: '🐁', name: 'Rubber Rat', sellPrice: 1, desc: 'Squeak! Calms him down. CHAOS-25', use: () => { pet.chaos-=25; sound.beep(); } },
+      'stale_pizza': { icon: '🍕', name: 'Floor Pizza', sellPrice: 2, desc: 'Aged perfectly. TRASH+40', use: () => { pet.hunger+=40; sound.munch(); } },
+      'energy_drink': { icon: '🥫', name: 'Jolt Cola', sellPrice: 2, desc: 'Liquid zoom! ENERGY+50 CHAOS+30', use: () => { pet.energy+=50; pet.chaos+=30; sound.fanfare(); } },
+      'leftover_sushi': { icon: '🍣', name: 'Warm Gas Sushi', sellPrice: 2, desc: 'Questionable. TRASH+45 CHAOS+20', use: () => { pet.hunger+=45; pet.chaos+=20; sound.munch(); } },
+      'shiny_spoon': { icon: '🥄', name: 'Bent Spoon', sellPrice: 3, desc: 'Ooooh shiny! CAPS+2 CHAOS-15', use: () => { pet.shinyCaps+=2; pet.chaos-=15; sound.fanfare(); } },
+      'bacon_jar': { icon: '🫙', name: 'Bacon Drip Jar', sellPrice: 2, desc: 'Pure lard. GREASE+50 TRASH+25', use: () => { pet.grease+=50; pet.hunger+=25; sound.trill(); } },
+      'bubble_wrap': { icon: '🫧', name: 'Bubble Wrap', sellPrice: 1, desc: 'Pop pop pop! CHAOS-40 ENERGY-5', use: () => { pet.chaos-=40; pet.energy-=5; sound.beep(); } },
+      'espresso_pod': { icon: '☕', name: 'Used Espresso', sellPrice: 2, desc: 'Crunchy grounds! ENERGY+45 CHAOS+20', use: () => { pet.energy+=45; pet.chaos+=20; sound.scuttle(); } },
+      'copper_wire': { icon: '🔌', name: 'Copper Wire', sellPrice: 3, desc: 'Stripped from a wall. CAPS+3 CHAOS+10', use: () => { pet.shinyCaps+=3; pet.chaos+=10; sound.fanfare(); } },
+      'moldy_bagel': { icon: '🥯', name: 'Fuzzy Bagel', sellPrice: 1, desc: 'Penicillin boost! TRASH+30 GREASE+15', use: () => { pet.hunger+=30; pet.grease+=15; sound.munch(); } },
+      'catnip_mouse': { icon: '🧶', name: 'Catnip Yarn', sellPrice: 2, desc: 'Stolen from a cat. CHAOS+35 ENERGY+15', use: () => { pet.chaos+=35; pet.energy+=15; sound.yip(); } },
+      'hairball': { icon: '🧶', name: 'Cursed Hairball', sellPrice: 1, desc: 'Why did he eat it?! GREASE+40 TRASH+5', use: () => { pet.grease+=40; pet.hunger+=5; sound.hiss(); } },
+      'gold_tooth': { icon: '🦷', name: 'Gold Crown', sellPrice: 5, desc: 'Found in an alley. CAPS+5!', use: () => { pet.shinyCaps+=5; sound.fanfare(); } },
+      'hot_sauce': { icon: '🌶️', name: 'Taco Sauce Pkt', sellPrice: 1, desc: 'FIRE MOUTH! CHAOS+40 ENERGY+20', use: () => { pet.chaos+=40; pet.energy+=20; sound.hiss(); } },
+      'cardboard_tube': { icon: '🧻', name: 'TP Roll Tube', sellPrice: 2, desc: 'Bap bap! PALACE+25 CHAOS-15', use: () => { pet.trashCollected=(pet.trashCollected||0)+25; pet.chaos-=15; drawTrashPalace(); sound.thud(); } },
+      'rac_crown': { icon: '🥫', name: 'Golden Pull-Tab', sellPrice: 4, desc: 'Royal currency! CAPS+4 XP+50', use: () => { pet.shinyCaps+=4; gainXp(50); sound.fanfare(); } },
+      'mystery_meat': { icon: '🍖', name: 'Alley Rib-Bite', sellPrice: 2, desc: 'Unknown origin. TRASH+55 GREASE+20', use: () => { pet.hunger+=55; pet.grease+=20; sound.trill(); } },
+      'soap_bar': { icon: '🧼', name: 'Hotel Soap', sellPrice: 1, desc: 'CURSED CLEANLINESS! GREASE-35 CHAOS+25', use: () => { pet.grease-=35; pet.chaos+=25; sound.hiss(); } },
+      // Premium Trash Marketplace Exclusives
+      'truffle_fries': { icon: '🍟', name: 'Bistro Truffle Fries', buyPrice: 3, sellPrice: 2, isPremium: true, desc: 'Fancy bin! TRASH+65 GREASE+35 XP+40', use: () => { pet.hunger+=65; pet.grease+=35; gainXp(40); sound.trill(); } },
+      'wagyu_scraps': { icon: '🥩', name: 'Steakhouse Wagyu', buyPrice: 5, sellPrice: 3, isPremium: true, desc: 'Marbled fat! TRASH+85 GREASE+50 XP+60', use: () => { pet.hunger+=85; pet.grease+=50; gainXp(60); sound.fanfare(); } },
+      'artisan_cheese': { icon: '🧀', name: 'Aged Brie Wheel', buyPrice: 4, sellPrice: 2, isPremium: true, desc: 'Extra stinky! TRASH+50 GREASE+40 CHAOS-25', use: () => { pet.hunger+=50; pet.grease+=40; pet.chaos-=25; sound.munch(); } },
+      'caviar_tin': { icon: '🐟', name: 'Expired Caviar Tin', buyPrice: 7, sellPrice: 4, isPremium: true, desc: 'Salty eggs! TRASH+70 GREASE+60 XP+100', use: () => { pet.hunger+=70; pet.grease+=60; gainXp(100); sound.fanfare(); } },
+      'golden_bagel': { icon: '🥯', name: '24K Everything Bagel', buyPrice: 8, sellPrice: 5, isPremium: true, desc: 'Gilded carbs! TRASH+100 ENERGY+50 XP+120', use: () => { pet.hunger+=100; pet.energy+=50; gainXp(120); sound.fanfare(); } },
+      'radioactive_sludge': { icon: '☢️', name: 'Isotope Ooze', buyPrice: 9, sellPrice: 5, isPremium: true, desc: 'GLOW UP! ENERGY+100 GREASE+100 CHAOS+50 XP+150', use: () => { pet.energy+=100; pet.grease+=100; pet.chaos+=50; gainXp(150); sound.fanfare(); } },
+      'royal_chalice': { icon: '🏆', name: 'Dumpster Grail', buyPrice: 12, sellPrice: 7, isPremium: true, desc: 'Palace centerpiece! PALACE+120 XP+200', use: () => { pet.trashCollected=(pet.trashCollected||0)+120; gainXp(200); drawTrashPalace(); sound.fanfare(); } },
+      'crypto_usb': { icon: '💾', name: 'Lost Ledger USB', buyPrice: 6, sellPrice: 3, isPremium: true, desc: 'Chewed silicon! XP+250 CHAOS+30', use: () => { gainXp(250); pet.chaos+=30; sound.scuttle(); } }
     };
+
+    const LOOTABLE_ITEMS = Object.keys(ITEM_DB).filter(k => !ITEM_DB[k].isPremium);
 
     function renderMenu() {
       const list = document.getElementById('menuList');
@@ -2186,18 +2219,28 @@
         const opts = ["YES, WIPE SAVE", "NO, CANCEL"];
         opts.forEach((opt, idx) => {
           const item = document.createElement('div');
-          item.className = `p-1 rounded flex items-center transition-colors duration-100 ${idx === resetMenuIndex ? 'shadow-inner' : ''}`;
+          item.className = `p-1 rounded flex items-center cursor-pointer transition-colors duration-100 ${idx === resetMenuIndex ? 'shadow-inner' : ''}`;
           if (idx === resetMenuIndex) { item.style.backgroundColor = 'var(--lcd-pixel)'; item.style.color = 'var(--lcd-bg)'; }
           item.textContent = (idx === resetMenuIndex ? '▶ ' : '  ') + opt;
+          item.addEventListener('click', () => {
+            haptic(15);
+            resetMenuIndex = idx;
+            btnA.click();
+          });
           list.appendChild(item);
         });
       } else {
         headerTitle.textContent = "MAIN MENU";
         MENU_OPTIONS.forEach((opt, idx) => {
           const item = document.createElement('div');
-          item.className = `p-1 rounded flex items-center transition-colors duration-100 ${idx === menuIndex ? 'shadow-inner' : ''}`;
+          item.className = `p-1 rounded flex items-center cursor-pointer transition-colors duration-100 ${idx === menuIndex ? 'shadow-inner' : ''}`;
           if (idx === menuIndex) { item.style.backgroundColor = 'var(--lcd-pixel)'; item.style.color = 'var(--lcd-bg)'; }
           item.textContent = (idx === menuIndex ? '▶ ' : '  ') + opt;
+          item.addEventListener('click', () => {
+            haptic(15);
+            menuIndex = idx;
+            btnA.click();
+          });
           list.appendChild(item);
         });
       }
@@ -2205,6 +2248,8 @@
 
     function toggleMenu() {
       if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
+      if (isInventoryOpen) toggleInventory();
+      if (isMarketOpen) toggleMarket();
       isMenuOpen = !isMenuOpen;
       isConfirmReset = false;
       const menuDiv = document.getElementById('menuScreen');
@@ -2214,6 +2259,7 @@
 
     function toggleInventory() {
       if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
+      if (isMarketOpen) toggleMarket();
       isInventoryOpen = !isInventoryOpen;
       const invDiv = document.getElementById('inventoryScreen');
       if (isInventoryOpen) { invDiv.classList.remove('hidden'); invDiv.classList.add('flex'); renderInventory(); sound.beep(); } 
@@ -2230,16 +2276,21 @@
       const totalTypes = Object.keys(ITEM_DB).length;
       if (header) header.textContent = `BAG (${invItems.length}/${totalTypes})`;
 
-      if (invItems.length === 0) { desc.innerHTML = "BAG IS EMPTY.<br/>Play RAID or HEIST to loot!"; return; }
+      if (invItems.length === 0) { desc.innerHTML = "BAG IS EMPTY.<br/>Play RAID, HEIST, or visit MARKET!"; return; }
       if (invIndex >= invItems.length) invIndex = Math.max(0, invItems.length - 1);
       invItems.forEach((itemId, idx) => {
         const item = ITEM_DB[itemId], count = pet.inventory[itemId];
         const slot = document.createElement('div');
-        slot.className = `w-full aspect-square border flex items-center justify-center relative text-lg sm:text-xl transition-all ${idx === invIndex ? 'shadow-inner' : ''}`;
+        slot.className = `w-full aspect-square border flex items-center justify-center relative text-lg sm:text-xl cursor-pointer transition-all ${idx === invIndex ? 'shadow-inner' : ''}`;
         slot.style.borderColor = idx === invIndex ? 'var(--lcd-pixel)' : 'var(--lcd-ui)';
         slot.style.backgroundColor = idx === invIndex ? 'var(--lcd-pixel)' : 'transparent';
         slot.style.color = idx === invIndex ? 'var(--lcd-bg)' : 'var(--lcd-pixel)';
         slot.innerHTML = `<span class="pixelated">${item.icon}</span><span class="absolute bottom-0 right-0.5 text-[6px] sm:text-[7px] font-bold">x${count}</span>`;
+        slot.addEventListener('click', () => {
+          haptic(15);
+          if (invIndex === idx) btnA.click();
+          else { invIndex = idx; sound.beep(); renderInventory(); }
+        });
         grid.appendChild(slot);
         if (idx === invIndex) {
           setTimeout(() => slot.scrollIntoView({ block: 'nearest' }), 0);
@@ -2247,6 +2298,156 @@
       });
       const activeItem = ITEM_DB[invItems[invIndex]];
       desc.innerHTML = `[${activeItem.name}]<br/>${activeItem.desc}`;
+    }
+
+    function toggleMarket() {
+      if (pet.inMiniGame || pet.inHeistGame || battle.active) return;
+      if (isInventoryOpen) toggleInventory();
+      isMarketOpen = !isMarketOpen;
+      const marketDiv = document.getElementById('marketScreen');
+      if (isMarketOpen) {
+        marketIndex = 0;
+        marketDiv.classList.remove('hidden');
+        marketDiv.classList.add('flex');
+        renderMarket();
+        sound.beep();
+      } else {
+        marketDiv.classList.add('hidden');
+        marketDiv.classList.remove('flex');
+        sound.beep();
+      }
+    }
+
+    function switchMarketTab(newTab) {
+      if (newTab) marketTab = newTab;
+      else marketTab = (marketTab === 'BUY') ? 'SELL' : 'BUY';
+      marketIndex = 0;
+      sound.beep();
+      renderMarket();
+    }
+
+    document.getElementById('marketTabBuy').addEventListener('click', (e) => {
+      e.stopPropagation();
+      haptic(15);
+      switchMarketTab('BUY');
+    });
+    document.getElementById('marketTabSell').addEventListener('click', (e) => {
+      e.stopPropagation();
+      haptic(15);
+      switchMarketTab('SELL');
+    });
+
+    function renderMarket() {
+      const grid = document.getElementById('marketGrid');
+      const desc = document.getElementById('marketDesc');
+      const capsHeader = document.getElementById('marketCapsHeader');
+      const tabBuy = document.getElementById('marketTabBuy');
+      const tabSell = document.getElementById('marketTabSell');
+      grid.innerHTML = '';
+      if (capsHeader) capsHeader.textContent = `✨ ${pet.shinyCaps} CAPS`;
+
+      if (tabBuy && tabSell) {
+        if (marketTab === 'BUY') {
+          tabBuy.style.backgroundColor = 'var(--lcd-pixel)';
+          tabBuy.style.color = 'var(--lcd-bg)';
+          tabSell.style.backgroundColor = 'transparent';
+          tabSell.style.color = 'var(--lcd-pixel)';
+        } else {
+          tabSell.style.backgroundColor = 'var(--lcd-pixel)';
+          tabSell.style.color = 'var(--lcd-bg)';
+          tabBuy.style.backgroundColor = 'transparent';
+          tabBuy.style.color = 'var(--lcd-pixel)';
+        }
+      }
+
+      pet.inventory = pet.inventory || {};
+      if (marketTab === 'BUY') {
+        marketList = MARKET_PREMIUM_CATALOG.slice();
+      } else {
+        marketList = Object.keys(pet.inventory).filter(k => pet.inventory[k] > 0 && ITEM_DB[k]);
+      }
+
+      if (marketList.length === 0) {
+        desc.innerHTML = "NO ITEMS TO SELL!<br/>[SEL] Switch to BUY | [B] Exit";
+        return;
+      }
+
+      if (marketIndex >= marketList.length) marketIndex = Math.max(0, marketList.length - 1);
+
+      marketList.forEach((itemId, idx) => {
+        const item = ITEM_DB[itemId];
+        const count = pet.inventory[itemId] || 0;
+        const price = marketTab === 'BUY' ? item.buyPrice : (item.sellPrice || 1);
+        const slot = document.createElement('div');
+        slot.className = `w-full aspect-square border flex items-center justify-center relative text-lg sm:text-xl cursor-pointer transition-all ${idx === marketIndex ? 'shadow-inner' : ''}`;
+        slot.style.borderColor = idx === marketIndex ? 'var(--lcd-pixel)' : 'var(--lcd-ui)';
+        slot.style.backgroundColor = idx === marketIndex ? 'var(--lcd-pixel)' : 'transparent';
+        slot.style.color = idx === marketIndex ? 'var(--lcd-bg)' : 'var(--lcd-pixel)';
+        const badgeText = marketTab === 'BUY' ? `✨${price}` : `+${price}✨`;
+        const ownedBadge = marketTab === 'SELL' ? `<span class="absolute top-0 left-0.5 text-[6px] font-bold">x${count}</span>` : (count > 0 ? `<span class="absolute top-0 left-0.5 text-[6px] font-bold">x${count}</span>` : '');
+        slot.innerHTML = `${ownedBadge}<span class="pixelated">${item.icon}</span><span class="absolute bottom-0 right-0.5 text-[6px] sm:text-[7px] font-bold">${badgeText}</span>`;
+        slot.addEventListener('click', () => {
+          haptic(15);
+          if (marketIndex === idx) executeMarketTransaction();
+          else { marketIndex = idx; sound.beep(); renderMarket(); }
+        });
+        grid.appendChild(slot);
+        if (idx === marketIndex) {
+          setTimeout(() => slot.scrollIntoView({ block: 'nearest' }), 0);
+        }
+      });
+
+      const activeId = marketList[marketIndex];
+      const activeItem = ITEM_DB[activeId];
+      if (marketTab === 'BUY') {
+        desc.innerHTML = `[${activeItem.name}] COST: ✨${activeItem.buyPrice} | [A]BUY [SEL]SELL<br/>${activeItem.desc}`;
+      } else {
+        const sellVal = activeItem.sellPrice || 1;
+        desc.innerHTML = `[${activeItem.name}] SELL: +✨${sellVal} (Own: ${pet.inventory[activeId]})<br/>[A]SELL ITEM | [SEL]BUY TAB | [B]EXIT`;
+      }
+    }
+
+    function executeMarketTransaction() {
+      if (!isMarketOpen || marketList.length === 0) return;
+      const itemId = marketList[marketIndex];
+      const item = ITEM_DB[itemId];
+      if (!item) return;
+
+      if (marketTab === 'BUY') {
+        if (pet.shinyCaps < item.buyPrice) {
+          sound.hiss();
+          haptic([40, 50, 40]);
+          showReaction(`Need ✨${item.buyPrice} Caps!`);
+          setLog(`Not enough Shiny Caps for ${item.name} (Need ${item.buyPrice})!`);
+          return;
+        }
+        pet.shinyCaps -= item.buyPrice;
+        pet.inventory = pet.inventory || {};
+        pet.inventory[itemId] = (pet.inventory[itemId] || 0) + 1;
+        sound.cashRegister();
+        haptic([30, 40, 60]);
+        gainXp(15);
+        showReaction(`Bought ${item.icon}!`);
+        setLog(`Purchased ${item.name} for ${item.buyPrice} Caps! (Check BAG to eat/use)`);
+        renderMarket();
+        updateHUD();
+      } else {
+        const count = (pet.inventory && pet.inventory[itemId]) || 0;
+        if (count <= 0) {
+          sound.thud();
+          return;
+        }
+        const sellVal = item.sellPrice || 1;
+        pet.inventory[itemId]--;
+        pet.shinyCaps += sellVal;
+        sound.cashRegister();
+        haptic(25);
+        gainXp(5);
+        showReaction(`+✨${sellVal} CAPS!`);
+        setLog(`Sold ${item.name} to the Alley Fence for ${sellVal} Shiny Caps!`);
+        renderMarket();
+        updateHUD();
+      }
     }
     
     function performReset() {
@@ -2310,7 +2511,8 @@
       }
 
       toggleMenu();
-      if (opt.includes("NAP")) toggleNap();
+      if (opt.includes("MARKET")) toggleMarket();
+      else if (opt.includes("NAP")) toggleNap();
       else if (opt.includes("LINT")) btnStart.click(); 
       else if (opt.includes("INVENTORY")) toggleInventory();
       else if (opt.includes("HEIST")) initHeistGame();
@@ -2362,7 +2564,7 @@
     }
 
     function throwTrashAtScreen() {
-      if (isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || pet.isSleeping || isAnimatingThrow) return;
+      if (isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || isMarketOpen || pet.isSleeping || isAnimatingThrow) return;
       isAnimatingThrow = true;
       const projectiles = [ { emoji: "🍅", type: "splat", log: "a rotten tomato" }, { emoji: "🪨", type: "crack", log: "a heavy rock" }, { emoji: "🥦", type: "glitch", log: "cursed broccoli" }, { emoji: "🥫", type: "crack", log: "a soup can" } ];
       const proj = projectiles[Math.floor(Math.random() * projectiles.length)];
@@ -2435,7 +2637,7 @@
 
     setInterval(() => {
       pet.ageMinutes += 1;
-      const isBusy = isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen;
+      const isBusy = isARMode || pet.inMiniGame || pet.inHeistGame || battle.active || isMenuOpen || isInventoryOpen || isMarketOpen;
 
       if (pet.isSleeping) {
         pet.energy = Math.min(100, pet.energy + 8); gainXp(1); 
@@ -2542,7 +2744,7 @@
           sound.munch(); haptic(30); cansTipped++; dogWaking = Math.min(3, dogWaking + 1);
           if (pet.hunger > 100 && Math.random() < 0.4) dogWaking++;
           if (Math.random() > 0.70) {
-             const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+             const randomItem = LOOTABLE_ITEMS[Math.floor(Math.random() * LOOTABLE_ITEMS.length)];
              pet.inventory = pet.inventory || {}; pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
              showReaction(`Found ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
           } else showReaction("Scavenging...");
@@ -2618,7 +2820,7 @@
         } else {
           sound.munch(); haptic(30); heistLoot++; suspicion += 15 + Math.floor(Math.random() * 10);
           if (Math.random() > 0.45) {
-             const itemKeys = Object.keys(ITEM_DB), randomItem = itemKeys[Math.floor(Math.random() * itemKeys.length)];
+             const randomItem = LOOTABLE_ITEMS[Math.floor(Math.random() * LOOTABLE_ITEMS.length)];
              pet.inventory = pet.inventory || {}; pet.inventory[randomItem] = (pet.inventory[randomItem] || 0) + 1;
              showReaction(`Stole ${ITEM_DB[randomItem].icon}!`); sound.fanfare();
           } else showReaction("Snatch!");
@@ -2666,13 +2868,16 @@
     btnMenu.addEventListener('click', () => {
       haptic(15);
       clearIdleAnims();
-      if (isInventoryOpen) toggleInventory(); else toggleMenu();
+      if (isMarketOpen) toggleMarket();
+      else if (isInventoryOpen) toggleInventory();
+      else toggleMenu();
     });
 
     btnA.addEventListener('click', () => {
       haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('A'); return; }
+      if (isMarketOpen) { executeMarketTransaction(); return; }
       if (isInventoryOpen) {
         if (invItems.length > 0) {
           const itemId = invItems[invIndex]; ITEM_DB[itemId].use(); pet.inventory[itemId]--; gainXp(25);
@@ -2714,6 +2919,7 @@
       haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('B'); return; }
+      if (isMarketOpen) { toggleMarket(); return; }
       if (isInventoryOpen) { toggleInventory(); return; }
       if (isMenuOpen) {
         if (isConfirmReset) {
@@ -2733,6 +2939,7 @@
       haptic(15);
       clearIdleAnims(); sound.beep(); 
       if (battle.active) { playerBattleAction('SELECT'); return; }
+      if (isMarketOpen) { switchMarketTab(); return; }
       if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen) return;
       toggleNap(); 
     });
@@ -2741,6 +2948,7 @@
       haptic(15);
       clearIdleAnims(); sound.beep();
       if (battle.active) { playerBattleAction('START'); return; }
+      if (isMarketOpen) { switchMarketTab(); return; }
       if (pet.inMiniGame || pet.inHeistGame || isMenuOpen || isInventoryOpen) return;
       sound.scuttle(); if (pet.isSleeping) return;
       pet.grease = Math.min(100, pet.grease + 25); gainXp(15);
@@ -2749,7 +2957,7 @@
 
     const pokeAction = () => {
        haptic(25); clearIdleAnims();
-       if (pet.isSleeping || isMenuOpen || isInventoryOpen || pet.inMiniGame || pet.inHeistGame || battle.active) return;
+       if (pet.isSleeping || isMenuOpen || isInventoryOpen || isMarketOpen || pet.inMiniGame || pet.inHeistGame || battle.active) return;
        const pokeEvents = [
          { sfx: 'yip', msg: "🐾 *YIP!*", log: "You poked Jimothy.", chaos: 2 }, { sfx: 'grumble', msg: "💢 *GRUMBLE*", log: "Jimothy growled at your finger.", chaos: 5 },
          { sfx: 'trill', msg: "✨ *TRILL*", log: "Jimothy purred happily.", chaos: -2 }, { sfx: 'hiss', msg: "🤬 *HISS*", log: "Jimothy hated that.", chaos: 8 }, { sfx: 'scuttle', msg: "🏃 *SCUTTLE*", log: "Jimothy dodged your finger.", chaos: 0 }
@@ -2765,7 +2973,8 @@
     
     document.getElementById('dpadUp').addEventListener('click', () => {
       haptic(15);
-      if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 4); renderInventory(); }
+      if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.max(0, marketIndex - 4); renderMarket(); }
+      else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 4); renderInventory(); }
       else if (isMenuOpen) { 
         sound.beep(); 
         if (isConfirmReset) resetMenuIndex = Math.max(0, resetMenuIndex - 1);
@@ -2777,7 +2986,8 @@
     
     document.getElementById('dpadDown').addEventListener('click', () => {
       haptic(15);
-      if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 4); renderInventory(); }
+      if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.min(marketList.length - 1, marketIndex + 4); renderMarket(); }
+      else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 4); renderInventory(); }
       else if (isMenuOpen) { 
         sound.beep(); 
         if (isConfirmReset) resetMenuIndex = Math.min(1, resetMenuIndex + 1);
@@ -2789,13 +2999,15 @@
     
     document.getElementById('dpadLeft').addEventListener('click', () => {
       haptic(15);
-      if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 1); renderInventory(); }
+      if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.max(0, marketIndex - 1); renderMarket(); }
+      else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.max(0, invIndex - 1); renderInventory(); }
       else pokeAction();
     });
 
     document.getElementById('dpadRight').addEventListener('click', () => {
       haptic(15);
-      if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 1); renderInventory(); }
+      if (isMarketOpen) { if (marketList.length === 0) return; sound.beep(); marketIndex = Math.min(marketList.length - 1, marketIndex + 1); renderMarket(); }
+      else if (isInventoryOpen) { if(invItems.length===0)return; sound.beep(); invIndex = Math.min(invItems.length - 1, invIndex + 1); renderInventory(); }
       else pokeAction();
     });
 
